@@ -7,6 +7,8 @@ class TelegramBot:
     - دریافت chat_id کاربرانی که پیام می‌دن
     - ذخیره chat_id جدید در فایل
     - ارسال پیام به کاربران
+    - ارسال پیام خوشامدگویی
+    - ارسال اخبار درخواستی
     """
     def __init__(self, token, subscribers_file="subscribers.txt"):
         self.token = token
@@ -37,6 +39,7 @@ class TelegramBot:
                     chat_id = str(update["message"]["chat"]["id"])
                     if chat_id not in existing:
                         new_ids.add(chat_id)
+                        self.send_welcome_message(chat_id)  # ارسال پیام خوشامدگویی
                 except KeyError:
                     continue
 
@@ -58,6 +61,69 @@ class TelegramBot:
         }
         res = requests.post(f"{self.base_url}/sendMessage", data=payload)
         return res.ok
+
+    def send_welcome_message(self, chat_id):
+        """
+        ارسال پیام خوشامدگویی و توضیحات در مورد ربات
+        """
+        welcome_message = (
+            "Welcome to MyTelegramNewsBot!\n\n"
+            "I will send you the latest news every day at the following times:\n"
+            "- 8:00 AM IRST\n"
+            "- 2:00 PM IRST\n"
+            "- 8:00 PM IRST\n"
+            "- 2:00 AM IRST\n\n"
+            "You can also get the latest news right now by clicking the button below!"
+        )
+        
+        # دکمه inline برای دریافت اخبار حال حاضر
+        keyboard = {
+            "inline_keyboard": [
+                [
+                    {"text": "Get News Now", "callback_data": "get_news_now"}
+                ]
+            ]
+        }
+
+        payload = {
+            "chat_id": chat_id,
+            "text": welcome_message,
+            "reply_markup": keyboard
+        }
+
+        response = requests.post(f"{self.base_url}/sendMessage", data=payload)
+        return response.ok
+
+    def handle_callback_query(self, callback_query):
+        """
+        هنگامی که کاربر دکمه "Get News Now" رو می‌زنه
+        """
+        chat_id = callback_query['message']['chat']['id']
+        if callback_query['data'] == 'get_news_now':
+            articles = self.fetch_latest_news()
+            for article in articles:
+                title = article.get("title", "No title")
+                url = article.get("url", "")
+                description = article.get("description", "")
+                message = f"📰 [{title}]({url})\n📄 {description or 'No description'}"
+                self.send_message(chat_id, message)
+
+    def fetch_latest_news(self):
+        """
+        دریافت آخرین اخبار از NewsAPI
+        """
+        url = "https://newsapi.org/v2/everything"
+        params = {
+            "q": "technology OR programming OR politics OR entertainment OR sports AND (Iran OR USA)",
+            "language": "en",
+            "sortBy": "relevancy",
+            "pageSize": 5,
+            "apiKey": self.api_key,
+        }
+        response = requests.get(url, params=params)
+        data = response.json()
+        return data.get("articles", [])
+
 
     def broadcast(self, message):
         """
