@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
-from NewsReaderBot.src.news_fetcher import NewsFetcher
-from NewsReaderBot.src.telegram_bot import TelegramBot
+from news_fetcher import NewsFetcher
+from telegram_bot import TelegramBot
 
 load_dotenv()
 
