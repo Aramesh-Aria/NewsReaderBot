@@ -34,8 +34,8 @@ class NewsFetcher:
 
     def fetch_news(self):
         """
-        دریافت اخبار انگلیسی با تمرکز روی موضوعات محبوب و مرتبط به ایران و آمریکا
+        دریافت اخبار از NewsAPI به تعداد دلخواه
         """
-        response = requests.get(self.url, params=self.params)
+        response = requests.get(self.url, params=self.params)  # استفاده از params که در __init__ تعریف شده
         data = response.json()
         return data.get("articles", [])

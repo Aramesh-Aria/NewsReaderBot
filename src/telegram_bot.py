@@ -24,30 +24,36 @@ class TelegramBot:
         بررسی پیام‌های جدید با getUpdates و ثبت chat_id کاربرانی که قبلاً ذخیره نشدن.
         خروجی: لیستی از chat_id های جدید
         """
-        response = requests.get(f"{self.base_url}/getUpdates") #از getUpdates تلگرام، پیام‌های دریافتی رو می‌گیره
+        response = requests.get(f"{self.base_url}/getUpdates")
         updates = response.json()
 
-        existing = set() 
+        existing = set()
         if os.path.exists(self.subscribers_file):
             with open(self.subscribers_file, "r") as f:
                 existing = set(f.read().splitlines())
 
-        new_ids = set() #چک می‌کنه کدوم chat_id  جدیدن و قبلاً ذخیره نشدن 
+        new_ids = set()  # چک می‌کنه کدوم chat_id جدیدن و قبلاً ذخیره نشدن
         if "result" in updates:
             for update in updates["result"]:
                 try:
                     chat_id = str(update["message"]["chat"]["id"])
                     if chat_id not in existing:
                         new_ids.add(chat_id)
-                        self.send_welcome_message(chat_id)  # ارسال پیام خوشامدگویی
+                        # ارسال پیام خوشامدگویی به کاربر جدید
+                        success = self.send_welcome_message(chat_id)
+                        if success:
+                            print(f"✅ Welcome message sent to {chat_id}")
+                        else:
+                            print(f"❌ Failed to send welcome message to {chat_id}")
                 except KeyError:
                     continue
 
-        if new_ids: #chat_id جدیدها رو به subscribers.txt اضافه می‌کنه
+        if new_ids:  # chat_id جدیدها رو به subscribers.txt اضافه می‌کنه
             with open(self.subscribers_file, "a") as f:
                 for cid in new_ids:
                     f.write(cid + "\n")
         return new_ids
+
 
     def send_message(self, chat_id, message):
         """
