@@ -13,6 +13,10 @@ class TelegramBot:
         self.base_url = f"https://api.telegram.org/bot{token}"
         self.subscribers_file = subscribers_file
 
+         # اگر فایل مشترکین وجود نداشت، بساز (خالی)
+        if not os.path.exists(self.subscribers_file):
+            open(self.subscribers_file, "w").close()
+            
     def get_new_chat_ids(self):
         """
         بررسی پیام‌های جدید با getUpdates و ثبت chat_id کاربرانی که قبلاً ذخیره نشدن.
