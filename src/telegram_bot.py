@@ -15,10 +15,10 @@ class TelegramBot:
         self.base_url = f"https://api.telegram.org/bot{token}"
         self.subscribers_file = subscribers_file
 
-         # اگر فایل مشترکین وجود نداشت، بساز (خالی)
+        # اگر فایل مشترکین وجود نداشت، بساز (خالی)
         if not os.path.exists(self.subscribers_file):
             open(self.subscribers_file, "w").close()
-            
+
     def get_new_chat_ids(self):
         """
         بررسی پیام‌های جدید با getUpdates و ثبت chat_id کاربرانی که قبلاً ذخیره نشدن.
@@ -30,15 +30,19 @@ class TelegramBot:
         existing = set()
         if os.path.exists(self.subscribers_file):
             with open(self.subscribers_file, "r") as f:
-                existing = set(f.read().splitlines())
+                existing = set(f.read().splitlines())  # مقداردهی به existing
 
-        new_ids = set()  # چک می‌کنه کدوم chat_id جدیدن و قبلاً ذخیره نشدن
+        new_ids = set()
         if "result" in updates:
             for update in updates["result"]:
                 try:
+                    # دریافت chat_id
                     chat_id = str(update["message"]["chat"]["id"])
+
+                    # اگر chat_id جدید باشه، اضافه می‌کنیم
                     if chat_id not in existing:
                         new_ids.add(chat_id)
+
                         # ارسال پیام خوشامدگویی به کاربر جدید
                         success = self.send_welcome_message(chat_id)
                         if success:
@@ -48,12 +52,12 @@ class TelegramBot:
                 except KeyError:
                     continue
 
-        if new_ids:  # chat_id جدیدها رو به subscribers.txt اضافه می‌کنه
+        # افزودن chat_id جدید به subscribers.txt
+        if new_ids:
             with open(self.subscribers_file, "a") as f:
                 for cid in new_ids:
                     f.write(cid + "\n")
         return new_ids
-
 
     def send_message(self, chat_id, message):
         """
@@ -124,12 +128,11 @@ class TelegramBot:
             "language": "en",
             "sortBy": "relevancy",
             "pageSize": 5,
-            "apiKey": self.api_key,
+            "apiKey": self.api_key,  # اطمینان از استفاده صحیح از self.api_key
         }
         response = requests.get(url, params=params)
         data = response.json()
         return data.get("articles", [])
-
 
     def broadcast(self, message):
         """
