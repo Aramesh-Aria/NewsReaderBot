@@ -24,9 +24,6 @@ def run():
 
 def main():
 
-    # شروع Web Server در یک Thread جداگانه
-    threading.Thread(target=run).start()
-
     # ایجاد جدول subscribers در دیتابیس
     create_subscribers_table()
 
@@ -37,12 +34,6 @@ def main():
     # ساخت نمونه‌های کلاس
     news = NewsFetcher(api_key=news_api_key)
     bot = TelegramBot(token=bot_token, api_key=news_api_key)
-
-    # شروع بات
-    bot.start_polling()
-
-    # چک کردن چت‌های جدید و ذخیره آن‌ها
-    bot.get_new_chat_ids()
 
     # گرفتن اخبار از NewsAPI
     articles = news.fetch_news()

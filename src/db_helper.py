@@ -2,7 +2,7 @@ import sqlite3
 import requests
 
 def create_subscribers_table():
-    conn = sqlite3.connect('subscribers.db')
+    conn = sqlite3.connect('../subscribers.db')
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS subscribers (
                     chat_id TEXT PRIMARY KEY,
@@ -13,7 +13,7 @@ def create_subscribers_table():
 
 def add_subscriber(chat_id):
     """افزودن کاربر جدید به دیتابیس"""
-    conn = sqlite3.connect('subscribers.db')
+    conn = sqlite3.connect('../subscribers.db')
     c = conn.cursor()
     c.execute("INSERT OR IGNORE INTO subscribers (chat_id) VALUES (?)", (chat_id,))
     conn.commit()
@@ -22,7 +22,7 @@ def add_subscriber(chat_id):
 
 def update_last_activity(chat_id):
     """به‌روزرسانی تاریخ آخرین فعالیت زمانی که کاربر پیام ارسال می‌کند"""
-    conn = sqlite3.connect('subscribers.db')
+    conn = sqlite3.connect('../subscribers.db')
     c = conn.cursor()
     c.execute('''UPDATE subscribers SET last_activity = CURRENT_TIMESTAMP WHERE chat_id = ?''', (chat_id,))
     conn.commit()
@@ -31,7 +31,7 @@ def update_last_activity(chat_id):
 
 def get_subscribers():
     """بازگشت لیست تمام مشترکین (chat_id ها)"""
-    conn = sqlite3.connect('subscribers.db')
+    conn = sqlite3.connect('../subscribers.db')
     c = conn.cursor()
     c.execute("SELECT chat_id FROM subscribers")
     subscribers = [row[0] for row in c.fetchall()]

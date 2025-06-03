@@ -4,7 +4,7 @@ __pycache__/
 
 # Env & secrets
 .env
-subscribers.db
+src/subscribers.db
 
 # Virtual environments
 .venv/
