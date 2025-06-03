@@ -1,150 +1,144 @@
 import os
 import requests
+from news_fetcher import NewsFetcher
+from telegram import Update,InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, CallbackContext, ContextTypes, JobQueue,CallbackQueryHandler
+from db_helper import add_subscriber, get_subscribers
+import pytz
+from datetime import datetime, timedelta
 
 class TelegramBot:
-    """ 
-    این کلاس مسئول ارتباط با ربات تلگرام است:
-    - دریافت chat_id کاربرانی که پیام می‌دن
-    - ذخیره chat_id جدید در فایل
-    - ارسال پیام به کاربران
-    - ارسال پیام خوشامدگویی
-    - ارسال اخبار درخواستی
-    """
-    def __init__(self, token, subscribers_file="subscribers.txt"):
+
+    def __init__(self, token, api_key):
         self.token = token
-        self.base_url = f"https://api.telegram.org/bot{token}"
-        self.subscribers_file = subscribers_file
+        self.api_key = api_key
+        self.base_url = f"https://api.telegram.org/bot{self.token}"
+        print("Starting Bot...")
+        self.app = Application.builder().token(token).build()
 
-        # اگر فایل مشترکین وجود نداشت، بساز (خالی)
-        if not os.path.exists(self.subscribers_file):
-            open(self.subscribers_file, "w").close()
+        # ایجاد نمونه NewsFetcher با ارسال api_key
+        self.news_fetcher = NewsFetcher(api_key=self.api_key)
 
-    def get_new_chat_ids(self):
-        """
-        بررسی پیام‌های جدید با getUpdates و ثبت chat_id کاربرانی که قبلاً ذخیره نشدن.
-        خروجی: لیستی از chat_id های جدید
-        """
-        response = requests.get(f"{self.base_url}/getUpdates")
-        updates = response.json()
+        # Commands
+        self.app.add_handler(CommandHandler('start', self.start))
+        self.app.add_handler(CommandHandler('info', self.send_info))
+        self.app.add_handler(CommandHandler('news', self.send_news))
+        self.app.add_handler(CallbackQueryHandler(self.button_click))
 
-        existing = set()
-        if os.path.exists(self.subscribers_file):
-            with open(self.subscribers_file, "r") as f:
-                existing = set(f.read().splitlines())  # مقداردهی به existing
+        # errors
+        self.app.add_error_handler(self.error)
 
-        new_ids = set()
-        if "result" in updates:
-            for update in updates["result"]:
-                try:
-                    # دریافت chat_id
-                    chat_id = str(update["message"]["chat"]["id"])
+        # تنظیم زمان‌بندی برای ارسال اخبار به صورت خودکار
+        self.job_queue = self.app.job_queue
+        self.schedule_news_updates()
 
-                    # اگر chat_id جدید باشه، اضافه می‌کنیم
-                    if chat_id not in existing:
-                        new_ids.add(chat_id)
+        # how often check for updates
+        print("polling...")
+        self.app.run_polling(poll_interval=3)
 
-                        # ارسال پیام خوشامدگویی به کاربر جدید
-                        success = self.send_welcome_message(chat_id)
-                        if success:
-                            print(f"✅ Welcome message sent to {chat_id}")
-                        else:
-                            print(f"❌ Failed to send welcome message to {chat_id}")
-                except KeyError:
-                    continue
+    def schedule_news_updates(self):
+        # زمان‌بندی اخبار هر 4 ساعت یکبار بر اساس زمان IRST (زمان ایران)
+        iran_time_zone = pytz.timezone('Asia/Tehran')
+        now = datetime.now(iran_time_zone)
 
-        # افزودن chat_id جدید به subscribers.txt
-        if new_ids:
-            with open(self.subscribers_file, "a") as f:
-                for cid in new_ids:
-                    f.write(cid + "\n")
-        return new_ids
+        # تنظیم زمان‌های ارسال اخبار هر 4 ساعت یکبار
+        times = [8, 12, 16, 20, 0, 4]  # ساعات 8 صبح، 12 ظهر، 4 عصر، 8 شب، 12 شب، 4 صبح
+        for hour in times:
+            # ایجاد زمان جدید با ساعت مشخص‌شده
+            scheduled_time = iran_time_zone.localize(datetime(now.year, now.month, now.day, hour, 0))
+            if scheduled_time < now:
+                scheduled_time += timedelta(days=1)  # اگر زمان گذشته بود، یک روز به آن اضافه می‌کنیم
 
-    def send_message(self, chat_id, message):
-        """
-        ارسال یک پیام به chat_id خاص با فرمت Markdown
-        """
-        payload = {
-            "chat_id": chat_id,
-            "text": message,
-            "parse_mode": "Markdown",
-            "disable_web_page_preview": True
-        }
-        res = requests.post(f"{self.base_url}/sendMessage", data=payload)
-        return res.ok
+            # تنظیم زمان‌بندی برای ارسال اخبار
+            self.job_queue.run_once(self.send_news, when=scheduled_time)
 
-    def send_welcome_message(self, chat_id):
-        """
-        ارسال پیام خوشامدگویی و توضیحات در مورد ربات
-        """
-        welcome_message = (
+    async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        start_message = (
             "Welcome to MyTelegramNewsBot!\n\n"
-            "I will send you the latest news every day at the following times:\n"
+            "I will send you the latest news every 4 hours at the following times:\n"
             "- 8:00 AM IRST\n"
-            "- 2:00 PM IRST\n"
+            "- 12:00 PM IRST\n"
+            "- 4:00 PM IRST\n"
             "- 8:00 PM IRST\n"
-            "- 2:00 AM IRST\n\n"
-            "You can also get the latest news right now by clicking the button below!"
+            "- 12:00 AM IRST\n"
+            "- 4:00 AM IRST\n\n"
         )
-        
-        # دکمه inline برای دریافت اخبار حال حاضر
-        keyboard = {
-            "inline_keyboard": [
-                [
-                    {"text": "Get News Now", "callback_data": "get_news_now"}
-                ]
-            ]
-        }
+        await update.message.reply_text(start_message)
 
-        payload = {
-            "chat_id": chat_id,
-            "text": welcome_message,
-            "reply_markup": keyboard
-        }
+        chat_id = str(update.message.chat.id)
 
-        response = requests.post(f"{self.base_url}/sendMessage", data=payload)
-        return response.ok
+        # افزودن کاربر به دیتابیس اگر جدید باشد
+        add_subscriber(chat_id)
 
-    def handle_callback_query(self, callback_query):
+    async def send_info(self, update: Update, context: CallbackContext):
+        info_message = (
+            "Here are some of the things you can do with this bot:\n"
+            "- Get the latest news in various categories like technology, politics, etc.\n"
+            "- Receive news updates at scheduled times.\n"
+            "To get the news now, click the button below!"
+        )
+
+        # اضافه کردن دکمه send_news به پیام info
+        keyboard = [
+            [InlineKeyboardButton("Get Latest News Now", callback_data='get_latest_news')],
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        # ارسال پیام همراه با دکمه
+        await update.message.reply_text(info_message, reply_markup=reply_markup)
+
+    async def send_news(self, update: Update = None, context: CallbackContext = None):
         """
-        هنگامی که کاربر دکمه "Get News Now" رو می‌زنه
+        Fetches the latest news from NewsFetcher and sends it.
+        If update is provided, news is sent to the user; otherwise, news is sent to all subscribers.
         """
-        chat_id = callback_query['message']['chat']['id']
-        if callback_query['data'] == 'get_news_now':
-            articles = self.fetch_latest_news()
+        articles = self.news_fetcher.fetch_news()
+        if not articles:
+            # ارسال پیام به کاربر یا تمام مشترکین در صورتی که خبری یافت نشود
+            no_news_message = "No news found at the moment. Please try again later."
+            if update:
+                await update.message.reply_text(no_news_message)
+            else:
+                # ارسال به تمام مشترکین
+                subscribers = get_subscribers()  # این تابع لیست تمام مشترکین را می‌گیرد
+                for chat_id in subscribers:
+                    await self.app.bot.send_message(chat_id, no_news_message)
+            return  # پس از ارسال پیام خطا، از اجرای باقی کد جلوگیری می‌شود
+
+        news_message = "Latest News:\n\n"
+        for article in articles:
+            title = article.get("title", "No title")
+            url = article.get("url", "")
+            desc = article.get("description", "No description")
+            news_message += f"{title}\n{desc}\n{url}\n\n"
+
+        # ارسال اخبار به کاربرانی که درخواست کرده‌اند
+        if update:
+            await update.message.reply_text(news_message)
+        else:
+            # ارسال اخبار به تمام مشترکین از دیتابیس
+            subscribers = get_subscribers()  # این تابع لیست تمام مشترکین را می‌گیرد
+            for chat_id in subscribers:
+                await self.app.bot.send_message(chat_id, news_message)
+
+    async def button_click(self, update: Update, context: CallbackContext):
+        query = update.callback_query
+        if query.data == 'get_latest_news':
+            # ارسال اخبار به کاربر
+            articles = self.news_fetcher.fetch_news()
+            if not articles:
+                await query.message.reply_text("No news found at the moment. Please try again later.")
+                return
+            news_message = "Latest News:\n\n"
             for article in articles:
                 title = article.get("title", "No title")
                 url = article.get("url", "")
-                description = article.get("description", "")
-                message = f"📰 [{title}]({url})\n📄 {description or 'No description'}"
-                self.send_message(chat_id, message)
+                desc = article.get("description", "No description")
+                news_message += f"{title}\n{desc}\n{url}\n\n"
 
-    def fetch_latest_news(self):
-        """
-        دریافت آخرین اخبار از NewsAPI
-        """
-        url = "https://newsapi.org/v2/everything"
-        params = {
-            "q": "technology OR programming OR politics OR entertainment OR sports AND (Iran OR USA)",
-            "language": "en",
-            "sortBy": "relevancy",
-            "pageSize": 5,
-            "apiKey": self.api_key,  # اطمینان از استفاده صحیح از self.api_key
-        }
-        response = requests.get(url, params=params)
-        data = response.json()
-        return data.get("articles", [])
+            await query.answer()  # پاسخ به دکمه
+            await query.message.reply_text(news_message)
 
-    def broadcast(self, message):
-        """
-        ارسال پیام به همه مشترکین ذخیره‌شده در فایل subscribers.txt
-        """
-        if not os.path.exists(self.subscribers_file):
-            print("❌ No subscribers found.")
-            return
+    async def error(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        print(f"Update{update} caused error {context.error}")
 
-        with open(self.subscribers_file, "r") as f:
-            chat_ids = f.read().splitlines()
-
-        for cid in chat_ids:
-            success = self.send_message(cid, message)
-            print(f"{cid}: {'✅' if success else '❌'}")
