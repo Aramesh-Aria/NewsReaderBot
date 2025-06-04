@@ -32,9 +32,10 @@ class TelegramBot:
         self.job_queue = self.app.job_queue
         self.schedule_news_updates()
 
-        # how often check for updates
+
+    async def run_async(self):
         print("polling...")
-        self.app.run_polling(poll_interval=3)
+        await self.app.run_polling(poll_interval=3)
 
     def schedule_news_updates(self):
         # زمان‌بندی اخبار هر 4 ساعت یکبار بر اساس زمان IRST (زمان ایران)

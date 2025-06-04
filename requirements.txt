@@ -1,6 +1,7 @@
 requests
 python-dotenv
 flask
-python-telegram-bot
-python-telegram-bot[job-queue]
 pytz
+httpx
+python-telegram-bot[httpx]
+nest_asyncio
