@@ -5,3 +5,5 @@ pytz
 httpx
 python-telegram-bot[httpx]
 nest_asyncio
+sqlalchemy
+alembic
