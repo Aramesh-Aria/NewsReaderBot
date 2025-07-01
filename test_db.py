@@ -7,7 +7,7 @@ import sys
 import os
 sys.path.append("src")
 
-from models import create_database, User, UserQuery, UserSource
+from models import create_database, User, UserQuery, UserSource, get_session
 from db_helper import (
     create_user, get_user, add_user_query, remove_user_query,
     toggle_user_source, get_user_queries, get_user_sources,
@@ -33,12 +33,12 @@ def test_database():
         first_name="Test",
         last_name="User"
     )
-    print(f"✅ User created: {user.chat_id}")
+    print(f"✅ User created: {test_chat_id}")
     
     # Test getting user
     print("\n3. Testing get user...")
     retrieved_user = get_user(test_chat_id)
-    print(f"✅ User retrieved: {retrieved_user.chat_id}")
+    print(f"✅ User retrieved: {retrieved_user.chat_id if retrieved_user else 'Not found'}")
     
     # Test adding queries
     print("\n4. Testing query management...")

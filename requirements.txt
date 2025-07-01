@@ -3,7 +3,7 @@ python-dotenv
 flask
 pytz
 httpx
-python-telegram-bot[httpx]
+python-telegram-bot[job-queue]
 nest_asyncio
 sqlalchemy
 alembic

@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, Boolean, ForeignKey, DateTime, Text
+from sqlalchemy import create_engine, Column, Integer, String, Boolean, ForeignKey, DateTime, Text, UniqueConstraint
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime
@@ -19,6 +19,7 @@ class User(Base):
     # Relationships
     queries = relationship("UserQuery", back_populates="user", cascade="all, delete-orphan")
     sources = relationship("UserSource", back_populates="user", cascade="all, delete-orphan")
+    topics = relationship("UserTopic", back_populates="user", cascade="all, delete-orphan")
 
 class UserQuery(Base):
     __tablename__ = 'user_queries'
@@ -44,15 +45,31 @@ class UserSource(Base):
     user = relationship("User", back_populates="sources")
     
     # Ensure unique combination of user and source
-    __table_args__ = (('user_id', 'source_domain'),)
+    __table_args__ = (UniqueConstraint('user_id', 'source_domain', name='uq_user_source'),)
+
+class UserTopic(Base):
+    __tablename__ = 'user_topics'
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    topic_name = Column(String(100), nullable=False)  # e.g., 'AI', 'Technology', 'Politics'
+    category = Column(String(50), nullable=False)  # e.g., 'tech', 'sci', 'pol'
+    is_enabled = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationship
+    user = relationship("User", back_populates="topics")
+    
+    # Ensure unique combination of user and topic
+    __table_args__ = (UniqueConstraint('user_id', 'topic_name', name='uq_user_topic'),)
 
 # Database setup
 def create_database():
-    engine = create_engine('sqlite:///../news_bot.db')
+    engine = create_engine('sqlite:///news_bot.db')
     Base.metadata.create_all(engine)
     return engine
 
 def get_session():
-    engine = create_engine('sqlite:///../news_bot.db')
+    engine = create_engine('sqlite:///news_bot.db')
     Session = sessionmaker(bind=engine)
     return Session() 

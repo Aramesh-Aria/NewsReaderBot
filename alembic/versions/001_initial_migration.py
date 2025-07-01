@@ -49,7 +49,7 @@ def upgrade() -> None:
         sa.Column('created_at', sa.DateTime(), nullable=True),
         sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
         sa.PrimaryKeyConstraint('id'),
-        sa.UniqueConstraint('user_id', 'source_domain')
+        sa.UniqueConstraint('user_id', 'source_domain', name='uq_user_source')
     )
 
 

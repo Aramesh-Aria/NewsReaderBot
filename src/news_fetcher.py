@@ -43,7 +43,60 @@ class NewsFetcher:
         }
 
         try:
-            response = requests.get(self.url, params=params)
+            response = requests.get(self.url, params=params, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            return data.get("articles", [])
+        except requests.RequestException as e:
+            print(f"Error fetching news: {e}")
+            return []
+
+    def fetch_news_by_topics_and_sources(self, enabled_topics, enabled_sources, user_queries=None):
+        """
+        Fetch news for a user based on their enabled topics and sources
+        """
+        if not enabled_topics and not enabled_sources:
+            return []
+        
+        # Build query from enabled topics
+        topic_queries = []
+        for topic in enabled_topics:
+            # Add quotes around multi-word topics
+            if " " in topic:
+                topic_queries.append(f'"{topic}"')
+            else:
+                topic_queries.append(topic)
+        
+        # Add user queries if provided
+        if user_queries:
+            topic_queries.extend(user_queries)
+        
+        # Combine all queries with OR operator
+        combined_query = " OR ".join(topic_queries) if topic_queries else "technology"
+        
+        # Combine enabled sources with comma separator
+        domains = ",".join(enabled_sources) if enabled_sources else ""
+        
+        # Date range: from 2 days ago to today
+        two_days_ago = (datetime.now() - timedelta(days=2)).strftime("%Y-%m-%d")
+        today = datetime.now().strftime("%Y-%m-%d")
+        
+        params = {
+            "q": combined_query,
+            "language": self.language,
+            "sortBy": "relevancy",
+            "from": two_days_ago,
+            "to": today,
+            "pageSize": self.page_size,
+            "apiKey": self.api_key,
+        }
+        
+        # Add domains parameter only if sources are specified
+        if domains:
+            params["domains"] = domains
+
+        try:
+            response = requests.get(self.url, params=params, timeout=10)
             response.raise_for_status()
             data = response.json()
             return data.get("articles", [])
