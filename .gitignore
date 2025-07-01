@@ -1,17 +1,61 @@
 # Python
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+news_bot.db
 
 # Env & secrets
 .env
-subscribers.db
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.env
 
 # Virtual environments
 .venv/
 venv/
+env/
+ENV/
 
 # IDE configs
 .idea/
+.vscode/
+*.swp
+*.swo
+*~
 
 # OS
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+temp/
+tmp/
+
+# Alembic
+alembic/versions/*.py
+!alembic/versions/__init__.py
+
+# Test files
+test_*.py
+*_test.py

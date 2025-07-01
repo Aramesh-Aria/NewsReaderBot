@@ -4,12 +4,12 @@ from news_fetcher import NewsFetcher
 from telegram_bot import TelegramBot
 from flask import Flask
 import threading
-from db_helper import create_subscribers_table
+from models import create_database
 import asyncio
 import nest_asyncio
 
 nest_asyncio.apply()
-# بارگذاری متغیرهای محیطی
+# Load environment variables
 load_dotenv()
 
 app = Flask(__name__)
@@ -22,17 +22,17 @@ def start_flask():
     app.run(host="0.0.0.0", port=5000)
 
 async def main():
-    # ایجاد جدول subscribers در دیتابیس
-    create_subscribers_table()
+    # Create database tables
+    create_database()
 
-    # گرفتن کلیدهای API از فایل .env
+    # Get API keys from .env file
     news_api_key = os.getenv("API_KEY")
     bot_token = os.getenv("BOT_TOKEN")
 
-    # اجرای Flask در یک Thread جداگانه
+    # Run Flask in a separate thread
     threading.Thread(target=start_flask).start()
 
-    # اجرای بات در thread اصلی
+    # Run bot in main thread
     bot = TelegramBot(token=bot_token, api_key=news_api_key)
     await bot.run_async()
 
