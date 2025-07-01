@@ -15,6 +15,7 @@ class User(Base):
     last_name = Column(String(100), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     last_activity = Column(DateTime, default=datetime.utcnow)
+    language = Column(String(10), default='en')  # 'en' for English, 'fa' for Farsi
     
     # Relationships
     queries = relationship("UserQuery", back_populates="user", cascade="all, delete-orphan")

@@ -13,7 +13,7 @@ def get_session():
     """Get a new database session"""
     return Session()
 
-def create_user(chat_id, username=None, first_name=None, last_name=None):
+def create_user(chat_id, username=None, first_name=None, last_name=None, language='en'):
     """Create a new user in the database"""
     session = get_session()
     try:
@@ -23,7 +23,8 @@ def create_user(chat_id, username=None, first_name=None, last_name=None):
                 chat_id=str(chat_id),
                 username=username,
                 first_name=first_name,
-                last_name=last_name
+                last_name=last_name,
+                language=language
             )
             session.add(user)
             session.commit()
@@ -330,5 +331,28 @@ def initialize_user_sources(chat_id):
     except Exception as e:
         session.rollback()
         raise e
+    finally:
+        session.close()
+
+def set_user_language(chat_id, language):
+    session = get_session()
+    try:
+        user = session.query(User).filter_by(chat_id=str(chat_id)).first()
+        if user:
+            user.language = language
+            session.commit()
+    except Exception as e:
+        session.rollback()
+        raise e
+    finally:
+        session.close()
+
+def get_user_language(chat_id):
+    session = get_session()
+    try:
+        user = session.query(User).filter_by(chat_id=str(chat_id)).first()
+        if user and user.language:
+            return user.language
+        return 'en'
     finally:
         session.close()
