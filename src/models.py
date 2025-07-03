@@ -18,20 +18,8 @@ class User(Base):
     language = Column(String(10), default='en')  # 'en' for English, 'fa' for Farsi
     
     # Relationships
-    queries = relationship("UserQuery", back_populates="user", cascade="all, delete-orphan")
     sources = relationship("UserSource", back_populates="user", cascade="all, delete-orphan")
     topics = relationship("UserTopic", back_populates="user", cascade="all, delete-orphan")
-
-class UserQuery(Base):
-    __tablename__ = 'user_queries'
-    
-    id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
-    query_text = Column(Text, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    
-    # Relationship
-    user = relationship("User", back_populates="queries")
 
 class UserSource(Base):
     __tablename__ = 'user_sources'
@@ -66,11 +54,11 @@ class UserTopic(Base):
 
 # Database setup
 def create_database():
-    engine = create_engine('sqlite:///news_bot.db')
+    engine = create_engine('postgresql+psycopg2://postgres:Ar2001ia18@localhost:5432/news_bot')
     Base.metadata.create_all(engine)
     return engine
 
 def get_session():
-    engine = create_engine('sqlite:///news_bot.db')
+    engine = create_engine('postgresql+psycopg2://postgres:Ar2001ia18@localhost:5432/news_bot')
     Session = sessionmaker(bind=engine)
     return Session() 

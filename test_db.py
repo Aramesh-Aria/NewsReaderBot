@@ -7,11 +7,9 @@ import sys
 import os
 sys.path.append("src")
 
-from models import create_database, User, UserQuery, UserSource, get_session
+from models import create_database, User, UserSource, get_session
 from db_helper import (
-    create_user, get_user, add_user_query, remove_user_query,
-    toggle_user_source, get_user_queries, get_user_sources,
-    get_enabled_sources_for_user, get_user_preferences
+    create_user, get_user
 )
 
 def test_database():
@@ -40,27 +38,10 @@ def test_database():
     retrieved_user = get_user(test_chat_id)
     print(f"✅ User retrieved: {retrieved_user.chat_id if retrieved_user else 'Not found'}")
     
-    # Test adding queries
-    print("\n4. Testing query management...")
-    add_user_query(test_chat_id, "technology AI")
-    add_user_query(test_chat_id, "machine learning")
-    queries = get_user_queries(test_chat_id)
-    print(f"✅ Queries added: {queries}")
-    
-    # Test removing query
-    remove_user_query(test_chat_id, "technology AI")
-    queries = get_user_queries(test_chat_id)
-    print(f"✅ Query removed, remaining: {queries}")
-    
     # Test source management
     print("\n5. Testing source management...")
     sources = get_user_sources(test_chat_id)
     print(f"✅ Initial sources: {sources}")
-    
-    # Toggle a source
-    toggle_user_source(test_chat_id, "cnn.com")
-    sources = get_user_sources(test_chat_id)
-    print(f"✅ After toggle: {sources}")
     
     # Get enabled sources
     enabled_sources = get_enabled_sources_for_user(test_chat_id)

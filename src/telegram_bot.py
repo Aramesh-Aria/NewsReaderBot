@@ -4,8 +4,8 @@ from news_fetcher import NewsFetcher
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackContext, ContextTypes, JobQueue, CallbackQueryHandler, MessageHandler, filters
 from db_helper import (
-    create_user, update_user_activity, get_user_queries, get_user_sources,
-    add_user_query, remove_user_query, toggle_user_source, get_enabled_sources_for_user,
+    create_user, update_user_activity, get_user_sources,
+    get_enabled_sources_for_user,
     get_all_users, get_user_preferences, toggle_user_topic, get_user_topics,
     get_enabled_topics_for_user, initialize_user_topics, initialize_user_sources,
     get_user, set_user_language, get_user_language
@@ -197,7 +197,7 @@ class TelegramBot:
             # Get user preferences
             enabled_topics = get_enabled_topics_for_user(chat_id)
             enabled_sources = get_enabled_sources_for_user(chat_id)
-            queries = get_user_queries(chat_id)
+            # queries = get_user_queries(chat_id)  # Removed
             # Build info message
             if lang == 'fa':
                 info_message = "📊 تنظیمات فعلی شما:\n\n"
@@ -471,7 +471,7 @@ class TelegramBot:
                 # Handle source toggle
                 elif data.startswith("source:"):
                     source_domain = data.split(":", 1)[1]
-                    is_enabled = toggle_user_source(chat_id, source_domain)
+                    is_enabled = toggle_user_topic(chat_id, source_domain)
                     status = "enabled" if is_enabled else "disabled"
                     
                     # Recreate the keyboard with updated status
@@ -580,12 +580,12 @@ class TelegramBot:
         """Send personalized news to a specific user"""
         try:
             # Get user preferences
-            queries = get_user_queries(chat_id)
+            # queries = get_user_queries(chat_id)  # Removed
             enabled_sources = get_enabled_sources_for_user(chat_id)
             enabled_topics = get_enabled_topics_for_user(chat_id)
             
             # Check if user has any preferences set
-            if not enabled_topics and not enabled_sources and not queries:
+            if not enabled_topics and not enabled_sources:
                 message = "❌ No preferences set. Use /topics to set up your news topics!"
                 if update:
                     await update.message.reply_text(message)
@@ -593,7 +593,7 @@ class TelegramBot:
             
             # Fetch personalized news using the new topic system
             articles = self.news_fetcher.fetch_news_by_topics_and_sources(
-                enabled_topics, enabled_sources, queries
+                enabled_topics, enabled_sources
             )
             
             if not articles:

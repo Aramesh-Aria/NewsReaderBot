@@ -1,11 +1,11 @@
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
-from models import Base, User, UserQuery, UserSource, UserTopic
+from models import Base, User, UserSource, UserTopic
 from datetime import datetime
 from categories import TOPIC_CATEGORIES, SOURCE_CATEGORIES, get_all_topics, get_all_sources
 
 # Database setup
-engine = create_engine('sqlite:///news_bot.db')
+engine = create_engine('postgresql+psycopg2://postgres:Ar2001ia18@localhost:5432/news_bot')
 Base.metadata.create_all(engine)
 Session = sessionmaker(bind=engine)
 
@@ -89,97 +89,6 @@ def get_all_users():
     finally:
         session.close()
 
-def add_user_query(chat_id, query_text):
-    """Add a new query for a user"""
-    session = get_session()
-    try:
-        user = session.query(User).filter_by(chat_id=str(chat_id)).first()
-        if user:
-            # Check if query already exists
-            existing_query = session.query(UserQuery).filter_by(
-                user_id=user.id, 
-                query_text=query_text
-            ).first()
-            
-            if not existing_query:
-                user_query = UserQuery(
-                    user_id=user.id,
-                    query_text=query_text
-                )
-                session.add(user_query)
-                session.commit()
-                return True
-        return False
-    except Exception as e:
-        session.rollback()
-        raise e
-    finally:
-        session.close()
-
-def remove_user_query(chat_id, query_text):
-    """Remove a query for a user"""
-    session = get_session()
-    try:
-        user = session.query(User).filter_by(chat_id=str(chat_id)).first()
-        if user:
-            query = session.query(UserQuery).filter_by(
-                user_id=user.id, 
-                query_text=query_text
-            ).first()
-            if query:
-                session.delete(query)
-                session.commit()
-                return True
-        return False
-    except Exception as e:
-        session.rollback()
-        raise e
-    finally:
-        session.close()
-
-def get_user_queries(chat_id):
-    """Get all queries for a user"""
-    session = get_session()
-    try:
-        user = session.query(User).filter_by(chat_id=str(chat_id)).first()
-        if user:
-            return [query.query_text for query in user.queries]
-        return []
-    finally:
-        session.close()
-
-def toggle_user_source(chat_id, source_domain):
-    """Toggle a source on/off for a user"""
-    session = get_session()
-    try:
-        user = session.query(User).filter_by(chat_id=str(chat_id)).first()
-        if user:
-            user_source = session.query(UserSource).filter_by(
-                user_id=user.id,
-                source_domain=source_domain
-            ).first()
-            
-            if user_source:
-                user_source.is_enabled = not user_source.is_enabled
-                session.commit()
-                return user_source.is_enabled
-            else:
-                # Create new source entry if it doesn't exist
-                user_source = UserSource(
-                    user_id=user.id,
-                    source_domain=source_domain,
-                    is_enabled=True
-                )
-                session.add(user_source)
-                session.commit()
-                return True
-        return None
-    except Exception as e:
-        session.rollback()
-        raise e
-    finally:
-        session.close()
-
 def get_user_sources(chat_id):
     """Get all sources and their enabled status for a user"""
     session = get_session()
@@ -209,7 +118,7 @@ def get_user_preferences(chat_id):
         user = session.query(User).filter_by(chat_id=str(chat_id)).first()
         if user:
             return {
-                'queries': [query.query_text for query in user.queries],
+                'queries': [],
                 'sources': {source.source_domain: source.is_enabled for source in user.sources},
                 'topics': {topic.topic_name: topic.is_enabled for topic in user.topics}
             }
