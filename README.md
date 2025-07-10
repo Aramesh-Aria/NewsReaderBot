@@ -218,6 +218,6 @@ python run_bot.py
 
 این پروژه تحت مجوز MIT منتشر شده است.
 
-MIT [LICENSE](LICENSE) 
+[MIT LICENSE](LICENSE) 
 Copyright (c) 2025 Aria Aramesh
 
