@@ -1,16 +1,16 @@
 import os
 import requests
-from news_fetcher import NewsFetcher
+from src.news_fetcher import NewsFetcher
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackContext, ContextTypes, JobQueue, CallbackQueryHandler, MessageHandler, filters
-from db_helper import (
+from src.db_helper import (
     create_user, update_user_activity, get_user_sources,
     get_enabled_sources_for_user,
     get_all_users, get_user_preferences, toggle_user_topic, get_user_topics,
     get_enabled_topics_for_user, initialize_user_topics, initialize_user_sources,
     get_user, set_user_language, get_user_language
 )
-from categories import TOPIC_CATEGORIES, SOURCE_CATEGORIES, get_all_topics, get_all_sources
+from src.categories import TOPIC_CATEGORIES, SOURCE_CATEGORIES, get_all_topics, get_all_sources
 import pytz
 from datetime import datetime, timedelta
 
@@ -315,8 +315,9 @@ class TelegramBot:
                 return None
             
             user_topics = get_user_topics(chat_id)
+            lang = get_user_language(chat_id)
             
-            message_text = f"📚 {cat_data['name']}\n\nSelect topics to enable/disable:\n\n"
+            message_text = f"📚 {cat_data['name']}\n\nSelect topics to enable/disable:\n\n" if lang != 'fa' else f"📚 {cat_data['name']}\n\nموضوعات را برای فعال/غیرفعال کردن انتخاب کنید:\n\n"
             
             # Create second-level keyboard with topic toggles
             keyboard = []
@@ -332,8 +333,8 @@ class TelegramBot:
             
             # Add navigation buttons
             keyboard.append([
-                InlineKeyboardButton("⬅️ Back to Categories", callback_data="show_topics"),
-                InlineKeyboardButton("🔧 Sources", callback_data="show_sources")
+                InlineKeyboardButton("⬅️ Back to Categories" if lang != 'fa' else "⬅️ بازگشت به دسته‌ها", callback_data="show_topics"),
+                InlineKeyboardButton("🔧 Sources" if lang != 'fa' else "🔧 منابع", callback_data="show_sources")
             ])
             
             reply_markup = InlineKeyboardMarkup(keyboard)
@@ -351,8 +352,9 @@ class TelegramBot:
                 return None
             
             user_sources = get_user_sources(chat_id)
+            lang = get_user_language(chat_id)
             
-            message_text = f"📰 {cat_data['name']}\n\nSelect sources to enable/disable:\n\n"
+            message_text = f"📰 {cat_data['name']}\n\nSelect sources to enable/disable:\n\n" if lang != 'fa' else f"📰 {cat_data['name']}\n\nمنابع را برای فعال/غیرفعال کردن انتخاب کنید:\n\n"
             
             # Create second-level keyboard with source toggles
             keyboard = []
@@ -368,8 +370,8 @@ class TelegramBot:
             
             # Add navigation buttons
             keyboard.append([
-                InlineKeyboardButton("⬅️ Back to Categories", callback_data="show_sources"),
-                InlineKeyboardButton("📚 Topics", callback_data="show_topics")
+                InlineKeyboardButton("⬅️ Back to Categories" if lang != 'fa' else "⬅️ بازگشت به دسته‌ها", callback_data="show_sources"),
+                InlineKeyboardButton("📚 Topics" if lang != 'fa' else "📚 موضوعات", callback_data="show_topics")
             ])
             
             reply_markup = InlineKeyboardMarkup(keyboard)
@@ -441,7 +443,7 @@ class TelegramBot:
                     user_topics = get_user_topics(chat_id)
                     
                     # Find which category this topic belongs to
-                    from categories import get_topic_category
+                    from src.categories import get_topic_category
                     category_id = get_topic_category(topic_name)
                     if category_id and category_id in TOPIC_CATEGORIES:
                         cat_data = TOPIC_CATEGORIES[category_id]
@@ -458,9 +460,10 @@ class TelegramBot:
                             ])
                         
                         # Add navigation buttons
+                        lang = get_user_language(chat_id)
                         keyboard.append([
-                            InlineKeyboardButton("⬅️ Back to Categories", callback_data="show_topics"),
-                            InlineKeyboardButton("🔧 Sources", callback_data="show_sources")
+                            InlineKeyboardButton("⬅️ Back to Categories" if lang != 'fa' else "⬅️ بازگشت به دسته‌ها", callback_data="show_topics"),
+                            InlineKeyboardButton("🔧 Sources" if lang != 'fa' else "🔧 منابع", callback_data="show_sources")
                         ])
                         
                         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -479,7 +482,7 @@ class TelegramBot:
                     user_sources = get_user_sources(chat_id)
                     
                     # Find which category this source belongs to
-                    from categories import get_source_category
+                    from src.categories import get_source_category
                     category_id = get_source_category(source_domain)
                     if category_id and category_id in SOURCE_CATEGORIES:
                         cat_data = SOURCE_CATEGORIES[category_id]
@@ -496,9 +499,10 @@ class TelegramBot:
                             ])
                         
                         # Add navigation buttons
+                        lang = get_user_language(chat_id)
                         keyboard.append([
-                            InlineKeyboardButton("⬅️ Back to Categories", callback_data="show_sources"),
-                            InlineKeyboardButton("📚 Topics", callback_data="show_topics")
+                            InlineKeyboardButton("⬅️ Back to Categories" if lang != 'fa' else "⬅️ بازگشت به دسته‌ها", callback_data="show_sources"),
+                            InlineKeyboardButton("📚 Topics" if lang != 'fa' else "📚 موضوعات", callback_data="show_topics")
                         ])
                         
                         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -510,8 +514,9 @@ class TelegramBot:
                 elif data == "show_topics":
                     # Initialize topics if not already done
                     initialize_user_topics(chat_id)
+                    lang = get_user_language(chat_id)
                     
-                    message = "📚 Choose a topic category to manage your news topics:\n\n"
+                    message = "📚 Choose a topic category to manage your news topics:\n\n" if lang != 'fa' else "📚 یک دسته‌بندی موضوعی را برای مدیریت موضوعات خبری انتخاب کنید:\n\n"
                     
                     # Create first-level keyboard with categories
                     keyboard = []
@@ -525,8 +530,8 @@ class TelegramBot:
                     
                     # Add navigation buttons
                     keyboard.append([
-                        InlineKeyboardButton("🔧 Sources", callback_data="show_sources"),
-                        InlineKeyboardButton("📰 Get News", callback_data="get_news")
+                        InlineKeyboardButton("🔧 Sources" if lang != 'fa' else "🔧 منابع", callback_data="show_sources"),
+                        InlineKeyboardButton("📰 Get News" if lang != 'fa' else "📰 دریافت خبر", callback_data="get_news")
                     ])
                     
                     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -535,8 +540,9 @@ class TelegramBot:
                 elif data == "show_sources":
                     # Initialize sources if not already done
                     initialize_user_sources(chat_id)
+                    lang = get_user_language(chat_id)
                     
-                    message = "📰 Choose a source category to manage your news sources:\n\n"
+                    message = "📰 Choose a source category to manage your news sources:\n\n" if lang != 'fa' else "📰 یک دسته‌بندی منبع را برای مدیریت منابع خبری انتخاب کنید:\n\n"
                     
                     # Create first-level keyboard with categories
                     keyboard = []
@@ -550,8 +556,8 @@ class TelegramBot:
                     
                     # Add navigation buttons
                     keyboard.append([
-                        InlineKeyboardButton("📚 Topics", callback_data="show_topics"),
-                        InlineKeyboardButton("📰 Get News", callback_data="get_news")
+                        InlineKeyboardButton("📚 Topics" if lang != 'fa' else "📚 موضوعات", callback_data="show_topics"),
+                        InlineKeyboardButton("📰 Get News" if lang != 'fa' else "📰 دریافت خبر", callback_data="get_news")
                     ])
                     
                     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -559,7 +565,9 @@ class TelegramBot:
                     
                 elif data == "get_news":
                     # Send a loading message first
-                    await query.message.reply_text("📰 Fetching your personalized news...")
+                    lang = get_user_language(chat_id)
+                    loading_message = "📰 Fetching your personalized news..." if lang != 'fa' else "📰 در حال دریافت اخبار شخصی‌سازی شده شما..."
+                    await query.message.reply_text(loading_message)
                     await self.send_news_to_user(chat_id, None, context)
                 
         except Exception as e:
@@ -574,19 +582,21 @@ class TelegramBot:
             await self.send_news_to_user(chat_id, update, context)
         except Exception as e:
             print(f"Error in send_news: {e}")
-            await update.message.reply_text("❌ An error occurred. Please try again.")
+            lang = get_user_language(chat_id)
+            error_message = "❌ An error occurred. Please try again." if lang != 'fa' else "❌ خطایی رخ داد. لطفا دوباره تلاش کنید."
+            await update.message.reply_text(error_message)
 
     async def send_news_to_user(self, chat_id, update=None, context=None):
         """Send personalized news to a specific user"""
         try:
-            # Get user preferences
-            # queries = get_user_queries(chat_id)  # Removed
+            # Get user preferences and language
             enabled_sources = get_enabled_sources_for_user(chat_id)
             enabled_topics = get_enabled_topics_for_user(chat_id)
+            lang = get_user_language(chat_id)
             
             # Check if user has any preferences set
             if not enabled_topics and not enabled_sources:
-                message = "❌ No preferences set. Use /topics to set up your news topics!"
+                message = "❌ No preferences set. Use /topics to set up your news topics!" if lang != 'fa' else "❌ هیچ تنظیماتی انتخاب نشده. از /topics برای تنظیم موضوعات خبری استفاده کنید!"
                 if update:
                     await update.message.reply_text(message)
                 return
@@ -597,25 +607,29 @@ class TelegramBot:
             )
             
             if not articles:
-                message = "📭 No news found matching your preferences. Try adjusting your topics or sources."
+                message = "📭 No news found matching your preferences. Try adjusting your topics or sources." if lang != 'fa' else "📭 هیچ خبری مطابق با تنظیمات شما یافت نشد. موضوعات یا منابع خود را تنظیم کنید."
                 if update:
                     await update.message.reply_text(message)
                 return
             
             # Format news message
-            news_message = f"📰 Latest News (based on your preferences):\n\n"
+            news_message = f"📰 Latest News (based on your preferences):\n\n" if lang != 'fa' else f"📰 آخرین اخبار (بر اساس تنظیمات شما):\n\n"
             
             # Show what topics/sources were used
             if enabled_topics:
-                news_message += f"📚 Topics: {', '.join(enabled_topics[:3])}"
+                topics_label = "📚 Topics:" if lang != 'fa' else "📚 موضوعات:"
+                news_message += f"{topics_label} {', '.join(enabled_topics[:3])}"
                 if len(enabled_topics) > 3:
-                    news_message += f" (+{len(enabled_topics)-3} more)"
+                    more_text = " more" if lang != 'fa' else " بیشتر"
+                    news_message += f" (+{len(enabled_topics)-3}{more_text})"
                 news_message += "\n"
             
             if enabled_sources:
-                news_message += f"📰 Sources: {', '.join(enabled_sources[:3])}"
+                sources_label = "📰 Sources:" if lang != 'fa' else "📰 منابع:"
+                news_message += f"{sources_label} {', '.join(enabled_sources[:3])}"
                 if len(enabled_sources) > 3:
-                    news_message += f" (+{len(enabled_sources)-3} more)"
+                    more_text = " more" if lang != 'fa' else " بیشتر"
+                    news_message += f" (+{len(enabled_sources)-3}{more_text})"
                 news_message += "\n"
             
             news_message += "\n" + "="*50 + "\n\n"
@@ -628,7 +642,8 @@ class TelegramBot:
                 
                 news_message += f"🔸 {title}\n"
                 news_message += f"📝 {desc[:100]}...\n"
-                news_message += f"📰 Source: {source}\n"
+                source_label = "📰 Source:" if lang != 'fa' else "📰 منبع:"
+                news_message += f"{source_label} {source}\n"
                 news_message += f"🔗 {url}\n\n"
             
             # Send message
@@ -638,8 +653,9 @@ class TelegramBot:
                 await self.app.bot.send_message(chat_id, news_message)
         except Exception as e:
             print(f"Error in send_news_to_user: {e}")
+            error_message = "❌ An error occurred while fetching news. Please try again later." if lang != 'fa' else "❌ خطایی در دریافت اخبار رخ داد. لطفا دوباره تلاش کنید."
             if update:
-                await update.message.reply_text("❌ An error occurred while fetching news. Please try again later.")
+                await update.message.reply_text(error_message)
             return
 
     async def send_scheduled_news(self, context: CallbackContext):

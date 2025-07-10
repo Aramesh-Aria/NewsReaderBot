@@ -1,11 +1,16 @@
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
-from models import Base, User, UserSource, UserTopic
+from src.models import Base, User, UserSource, UserTopic
 from datetime import datetime
-from categories import TOPIC_CATEGORIES, SOURCE_CATEGORIES, get_all_topics, get_all_sources
+from src.categories import TOPIC_CATEGORIES, SOURCE_CATEGORIES, get_all_topics, get_all_sources
+import os
 
 # Database setup
-engine = create_engine('postgresql+psycopg2://postgres:Ar2001ia18@localhost:5432/news_bot')
+database_url = os.getenv('DATABASE_URL')
+if not database_url:
+    raise ValueError("DATABASE_URL is not set in environment variables.")
+
+engine = create_engine(database_url)
 Base.metadata.create_all(engine)
 Session = sessionmaker(bind=engine)
 
@@ -144,7 +149,7 @@ def toggle_user_topic(chat_id, topic_name):
                 return user_topic.is_enabled
             else:
                 # Create new topic entry if it doesn't exist
-                from categories import get_topic_category
+                from src.categories import get_topic_category
                 category = get_topic_category(topic_name)
                 if category:
                     user_topic = UserTopic(
