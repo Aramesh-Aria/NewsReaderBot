@@ -7,3 +7,5 @@ python-telegram-bot[job-queue]
 nest_asyncio
 sqlalchemy
 alembic
+psycopg2-binary
+gunicorn

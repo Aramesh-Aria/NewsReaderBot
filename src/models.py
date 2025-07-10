@@ -2,6 +2,7 @@ from sqlalchemy import create_engine, Column, Integer, String, Boolean, ForeignK
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime
+import os
 
 Base = declarative_base()
 
@@ -15,22 +16,11 @@ class User(Base):
     last_name = Column(String(100), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     last_activity = Column(DateTime, default=datetime.utcnow)
+    language = Column(String(10), default='en')  # 'en' for English, 'fa' for Farsi
     
     # Relationships
-    queries = relationship("UserQuery", back_populates="user", cascade="all, delete-orphan")
     sources = relationship("UserSource", back_populates="user", cascade="all, delete-orphan")
     topics = relationship("UserTopic", back_populates="user", cascade="all, delete-orphan")
-
-class UserQuery(Base):
-    __tablename__ = 'user_queries'
-    
-    id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
-    query_text = Column(Text, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    
-    # Relationship
-    user = relationship("User", back_populates="queries")
 
 class UserSource(Base):
     __tablename__ = 'user_sources'
@@ -63,13 +53,17 @@ class UserTopic(Base):
     # Ensure unique combination of user and topic
     __table_args__ = (UniqueConstraint('user_id', 'topic_name', name='uq_user_topic'),)
 
+database_url = os.getenv('DATABASE_URL')
+if not database_url:
+    raise ValueError("DATABASE_URL is not set in environment variables.")
+
 # Database setup
 def create_database():
-    engine = create_engine('sqlite:///news_bot.db')
+    engine = create_engine(database_url)
     Base.metadata.create_all(engine)
     return engine
 
 def get_session():
-    engine = create_engine('sqlite:///news_bot.db')
+    engine = create_engine(database_url)
     Session = sessionmaker(bind=engine)
     return Session() 

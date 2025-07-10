@@ -52,10 +52,13 @@ logs/
 temp/
 tmp/
 
-# Alembic
-alembic/versions/*.py
-!alembic/versions/__init__.py
+# Alembic - Keep migration files in Git
+# alembic/versions/*.py
+# !alembic/versions/__init__.py
 
 # Test files
 test_*.py
 *_test.py
+
+#guide file
+guide.txt
