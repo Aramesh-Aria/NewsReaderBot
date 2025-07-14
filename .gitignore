@@ -62,3 +62,6 @@ test_*.py
 
 #guide file
 guide.txt
+/.cloud/
+.cloud/
+/.cloud
