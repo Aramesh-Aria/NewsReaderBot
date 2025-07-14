@@ -13,6 +13,9 @@ from src.db_helper import (
 from src.categories import TOPIC_CATEGORIES, SOURCE_CATEGORIES, get_all_topics, get_all_sources
 import pytz
 from datetime import datetime, timedelta
+import logging
+
+logger = logging.getLogger(__name__)
 
 class TelegramBot:
 
@@ -571,7 +574,7 @@ class TelegramBot:
                     await self.send_news_to_user(chat_id, None, context)
                 
         except Exception as e:
-            print(f"Error in button_click: {e}")
+            logger.exception("Error in button_click")
             await query.edit_message_text("❌ An error occurred. Please try again.\nیک خطا رخ داد. لطفا دوباره تلاش کنید.")
 
     async def send_news(self, update: Update, context: CallbackContext):
@@ -581,7 +584,7 @@ class TelegramBot:
             update_user_activity(chat_id)
             await self.send_news_to_user(chat_id, update, context)
         except Exception as e:
-            print(f"Error in send_news: {e}")
+            logger.exception("Error in send_news")
             lang = get_user_language(chat_id)
             error_message = "❌ An error occurred. Please try again." if lang != 'fa' else "❌ خطایی رخ داد. لطفا دوباره تلاش کنید."
             await update.message.reply_text(error_message)
@@ -652,7 +655,7 @@ class TelegramBot:
             else:
                 await self.app.bot.send_message(chat_id, news_message)
         except Exception as e:
-            print(f"Error in send_news_to_user: {e}")
+            logger.exception("Error in send_news_to_user")
             error_message = "❌ An error occurred while fetching news. Please try again later." if lang != 'fa' else "❌ خطایی در دریافت اخبار رخ داد. لطفا دوباره تلاش کنید."
             if update:
                 await update.message.reply_text(error_message)
@@ -665,11 +668,11 @@ class TelegramBot:
             for user in users:
                 await self.send_news_to_user(user.chat_id)
         except Exception as e:
-            print(f"Error in send_scheduled_news: {e}")
+            logger.exception("Error in send_scheduled_news")
 
     async def error(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle errors"""
-        print(f"Update {update} caused error {context.error}")
+        logger.error(f"Update {update} caused error", exc_info=context.error)
         try:
             if update and update.effective_message:
                 await update.effective_message.reply_text(
