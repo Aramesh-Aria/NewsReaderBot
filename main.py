@@ -6,6 +6,7 @@ This script runs only the bot without the Flask server.
 
 import os
 import logging
+import sys
 from dotenv import load_dotenv
 from src.telegram_bot import TelegramBot
 from src.models import create_database
@@ -20,6 +21,16 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+# Global exception handler to log uncaught exceptions
+
+def handle_exception(exc_type, exc_value, exc_traceback):
+    if issubclass(exc_type, KeyboardInterrupt):
+        sys.__excepthook__(exc_type, exc_value, exc_traceback)
+        return
+    logger.critical("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
+
+sys.excepthook = handle_exception
 
 # Load environment variables
 load_dotenv()
