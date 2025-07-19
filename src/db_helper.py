@@ -5,17 +5,18 @@ from datetime import datetime
 from src.categories import TOPIC_CATEGORIES, SOURCE_CATEGORIES, get_all_topics, get_all_sources
 import os
 
-# Database setup
-database_url = os.getenv('DATABASE_URL')
-if not database_url:
-    raise ValueError("DATABASE_URL is not set in environment variables.")
-
-engine = create_engine(database_url)
-Base.metadata.create_all(engine)
-Session = sessionmaker(bind=engine)
+def get_engine_and_session():
+    database_url = os.getenv('DATABASE_URL')
+    if not database_url:
+        raise ValueError("DATABASE_URL is not set in environment variables.")
+    engine = create_engine(database_url)
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+    return engine, Session
 
 def get_session():
     """Get a new database session"""
+    _, Session = get_engine_and_session()
     return Session()
 
 def create_user(chat_id, username=None, first_name=None, last_name=None, language='en'):
@@ -201,7 +202,7 @@ def initialize_user_topics(chat_id):
             
             for topic_name in all_topics:
                 if topic_name not in existing_topics:
-                    from categories import get_topic_category
+                    from src.categories import get_topic_category
                     category = get_topic_category(topic_name)
                     if category:
                         user_topic = UserTopic(

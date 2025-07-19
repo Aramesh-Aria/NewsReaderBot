@@ -574,6 +574,7 @@ class TelegramBot:
                     await self.send_news_to_user(chat_id, None, context)
                 
         except Exception as e:
+            print("Exception in button_click:", e)
             logger.exception("Error in button_click")
             await query.edit_message_text("❌ An error occurred. Please try again.\nیک خطا رخ داد. لطفا دوباره تلاش کنید.")
 

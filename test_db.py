@@ -186,7 +186,7 @@ def test_categories():
     """Test category system"""
     logger.info("📂 Testing category system...")
     try:
-        from categories import TOPIC_CATEGORIES, SOURCE_CATEGORIES, get_all_topics, get_all_sources
+        from src.categories import TOPIC_CATEGORIES, SOURCE_CATEGORIES, get_all_topics, get_all_sources
         
         # Test topic categories
         logger.info(f"✅ Topic categories: {len(TOPIC_CATEGORIES)} found")

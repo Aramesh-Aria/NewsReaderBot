@@ -53,17 +53,19 @@ class UserTopic(Base):
     # Ensure unique combination of user and topic
     __table_args__ = (UniqueConstraint('user_id', 'topic_name', name='uq_user_topic'),)
 
-database_url = os.getenv('DATABASE_URL')
-if not database_url:
-    raise ValueError("DATABASE_URL is not set in environment variables.")
-
 # Database setup
 def create_database():
+    database_url = os.getenv('DATABASE_URL')
+    if not database_url:
+        raise ValueError("DATABASE_URL is not set in environment variables.")
     engine = create_engine(database_url)
     Base.metadata.create_all(engine)
     return engine
 
 def get_session():
+    database_url = os.getenv('DATABASE_URL')
+    if not database_url:
+        raise ValueError("DATABASE_URL is not set in environment variables.")
     engine = create_engine(database_url)
     Session = sessionmaker(bind=engine)
-    return Session() 
+    return Session()
