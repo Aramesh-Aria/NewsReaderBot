@@ -470,14 +470,45 @@ class TelegramBot:
                         ])
                         
                         reply_markup = InlineKeyboardMarkup(keyboard)
-                        await query.edit_message_reply_markup(reply_markup=reply_markup)
+                        # Check if markup is different before updating
+                        if query.message.reply_markup and query.message.reply_markup.to_dict() == reply_markup.to_dict():
+                            await query.answer("No change.")
+                        else:
+                            await query.edit_message_reply_markup(reply_markup=reply_markup)
                     else:
                         await query.message.reply_text(f"❌ Error: Topic category not found")
                 
                 # Handle source toggle
                 elif data.startswith("source:"):
                     source_domain = data.split(":", 1)[1]
-                    is_enabled = toggle_user_topic(chat_id, source_domain)
+                    # Inline toggle_user_source logic
+                    from src.db_helper import get_user, get_session
+                    from src.models import UserSource
+                    session = get_session()
+                    try:
+                        user = get_user(chat_id)
+                        is_enabled = None
+                        if user:
+                            user_source = session.query(UserSource).filter_by(user_id=user.id, source_domain=source_domain).first()
+                            if user_source:
+                                user_source.is_enabled = not user_source.is_enabled
+                                session.commit()
+                                is_enabled = user_source.is_enabled
+                            else:
+                                # Create new source entry if it doesn't exist
+                                user_source = UserSource(
+                                    user_id=user.id,
+                                    source_domain=source_domain,
+                                    is_enabled=True
+                                )
+                                session.add(user_source)
+                                session.commit()
+                                is_enabled = True
+                    except Exception as e:
+                        session.rollback()
+                        raise e
+                    finally:
+                        session.close()
                     status = "enabled" if is_enabled else "disabled"
                     
                     # Recreate the keyboard with updated status
@@ -509,7 +540,11 @@ class TelegramBot:
                         ])
                         
                         reply_markup = InlineKeyboardMarkup(keyboard)
-                        await query.edit_message_reply_markup(reply_markup=reply_markup)
+                        # Check if markup is different before updating
+                        if query.message.reply_markup and query.message.reply_markup.to_dict() == reply_markup.to_dict():
+                            await query.answer("No change.")
+                        else:
+                            await query.edit_message_reply_markup(reply_markup=reply_markup)
                     else:
                         await query.message.reply_text(f"❌ Error: Source category not found")
                 
