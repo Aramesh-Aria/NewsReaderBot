@@ -126,7 +126,8 @@ python main.py
 ---
 ## 📸 نمونه رابط کاربری
 
-![ پیام تلگرام](preview/preview.gif)
+![پیام تلگرام](Preview/preview.gif)
+
 
 ---
 ### 🧪 تست و عیب‌یابی
