@@ -211,11 +211,3 @@ python main.py
 
 <!-- * 📬 [ربات تلگرام پروژه](https://t.me/News_AriaBot) -->
 
-
-## 🛡 مجوز
-
-این پروژه تحت مجوز MIT منتشر شده است.
-
-[MIT LICENSE](LICENSE) 
-Copyright (c) 2025 Aria Aramesh
-
