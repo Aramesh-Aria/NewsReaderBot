@@ -203,7 +203,7 @@ def main():
     print("\n🎉 Setup completed successfully!")
     print("\n📋 Next steps:")
     print("1. Make sure your .env file has correct API keys")
-    print("2. Run the bot: python run_bot.py")
+    print("2. Run the bot: python main.py")
     print("3. Send /start to your bot to begin")
     
     if not env_ok:
