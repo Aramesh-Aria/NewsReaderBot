@@ -1,11 +1,3 @@
-import os
-from dotenv import load_dotenv
-from src.main import app
-
-# Load environment variables
-load_dotenv()
-
-if __name__ == "__main__":
-    host = os.getenv('HOST', '0.0.0.0')
-    port = int(os.getenv('PORT', 5000))
-    app.run(host=host, port=port) 
+# This project is a Telegram bot (main.py), not a web app.
+# Runflare: use start command "python main.py" for the Python service.
+# wsgi.py is kept for compatibility; no Flask app is used. 

@@ -1,10 +1,8 @@
-requests==2.28.2
+requests==2.26.0
 python-dotenv==1.0.1
-pytz==2023.3
 httpx==0.25.1
 python-telegram-bot[job-queue]==20.6
 nest_asyncio==1.5.8
 sqlalchemy==1.4.51
 alembic==1.11.1
 psycopg2-binary==2.9.9
-gunicorn==21.2.0
