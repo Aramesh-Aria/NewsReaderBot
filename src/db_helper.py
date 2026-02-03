@@ -72,6 +72,22 @@ def get_all_users():
     finally:
         session.close()
 
+def delete_user(chat_id):
+    """Delete a user and all related data (sources/topics)"""
+    session = get_session()
+    try:
+        user = session.query(User).filter_by(chat_id=str(chat_id)).first()
+        if not user:
+            return False
+        session.delete(user)
+        session.commit()
+        return True
+    except Exception as e:
+        session.rollback()
+        raise e
+    finally:
+        session.close()
+
 def get_user_sources(chat_id):
     """Get all sources and their enabled status for a user"""
     session = get_session()

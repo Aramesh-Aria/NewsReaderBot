@@ -8,7 +8,7 @@ from src.db_helper import (
     get_enabled_sources_for_user,
     get_all_users, get_user_preferences, toggle_user_topic, get_user_topics,
     get_enabled_topics_for_user,
-    get_user, set_user_language, get_user_language
+    get_user, set_user_language, get_user_language, delete_user
 )
 from src.categories import TOPIC_CATEGORIES, SOURCE_CATEGORIES, get_all_topics, get_all_sources
 import pytz
@@ -48,6 +48,7 @@ class TelegramBot:
         self.app.add_handler(CommandHandler('topics', self.show_topics))
         self.app.add_handler(CommandHandler('sources', self.show_sources))
         self.app.add_handler(CommandHandler('language', self.language))
+        self.app.add_handler(CommandHandler('delete', self.delete))
         
         # Callback handlers
         self.app.add_handler(CallbackQueryHandler(self.button_click))
@@ -200,7 +201,7 @@ class TelegramBot:
                     username=getattr(user, 'username', None),
                     first_name=getattr(user, 'first_name', None),
                     last_name=getattr(user, 'last_name', None),
-                    language='en'
+                    language=None
                 )
                 user_obj = get_user(chat_id)
             # Ask for language selection if not set
@@ -335,7 +336,8 @@ class TelegramBot:
             keyboard = [
                 [InlineKeyboardButton("📚 Manage Topics" if lang != 'fa' else "📚 مدیریت موضوعات", callback_data="show_topics")],
                 [InlineKeyboardButton("📰 Manage Sources" if lang != 'fa' else "📰 مدیریت منابع", callback_data="show_sources")],
-                [InlineKeyboardButton("📰 Get News Now" if lang != 'fa' else "📰 دریافت خبر", callback_data="get_news")]
+                [InlineKeyboardButton("📰 Get News Now" if lang != 'fa' else "📰 دریافت خبر", callback_data="get_news")],
+                [InlineKeyboardButton("🗑 Delete My Data" if lang != 'fa' else "🗑 حذف اطلاعات من", callback_data="delete_user")],
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             if update.message:
@@ -501,6 +503,29 @@ class TelegramBot:
         chat_id = str(query.message.chat.id)
         data = query.data
         try:
+            update_user_activity(chat_id)
+
+            # If user record was deleted, allow re-registration via the same initial flow.
+            if not get_user(chat_id) and data not in ("confirm_delete", "cancel_delete") and not data.startswith("set_lang_"):
+                user = update.effective_user
+                create_user(
+                    chat_id=chat_id,
+                    username=getattr(user, 'username', None),
+                    first_name=getattr(user, 'first_name', None),
+                    last_name=getattr(user, 'last_name', None),
+                    language=None,
+                )
+                keyboard = [
+                    [InlineKeyboardButton("English 🇬🇧", callback_data="set_lang_en")],
+                    [InlineKeyboardButton("فارسی 🇮🇷", callback_data="set_lang_fa")],
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await query.message.reply_text(
+                    "Please select your language:\nلطفا زبان خود را انتخاب کنید:",
+                    reply_markup=reply_markup,
+                )
+                return
+
             if data in ("news:prev", "news:next"):
                 self._prune_news_pagination_cache()
                 lang = get_user_language(chat_id)
@@ -557,14 +582,32 @@ class TelegramBot:
                 return
 
             if data == "set_lang_en":
+                if not get_user(chat_id):
+                    user = update.effective_user
+                    create_user(
+                        chat_id=chat_id,
+                        username=getattr(user, 'username', None),
+                        first_name=getattr(user, 'first_name', None),
+                        last_name=getattr(user, 'last_name', None),
+                        language=None,
+                    )
                 set_user_language(chat_id, 'en')
                 await query.answer()
-                await query.edit_message_text("Language set to English.\nزبان به انگلیسی تغییر یافت.")
+                await query.edit_message_text("✅ Registration completed.\nLanguage set to English.\nزبان به انگلیسی تغییر یافت.")
                 await self.send_welcome_message(query, 'en')
             elif data == "set_lang_fa":
+                if not get_user(chat_id):
+                    user = update.effective_user
+                    create_user(
+                        chat_id=chat_id,
+                        username=getattr(user, 'username', None),
+                        first_name=getattr(user, 'first_name', None),
+                        last_name=getattr(user, 'last_name', None),
+                        language=None,
+                    )
                 set_user_language(chat_id, 'fa')
                 await query.answer()
-                await query.edit_message_text("زبان به فارسی تغییر یافت.\nLanguage set to Farsi.")
+                await query.edit_message_text("✅ ثبت‌نام انجام شد.\nزبان به فارسی تغییر یافت.\nLanguage set to Farsi.")
                 await self.send_welcome_message(query, 'fa')
             else:
                 # Handle topic category selection
@@ -749,8 +792,49 @@ class TelegramBot:
                     reply_markup = InlineKeyboardMarkup(keyboard)
                     await query.edit_message_text(text=message, reply_markup=reply_markup)
                     
+                elif data == "delete_user":
+                    lang = get_user_language(chat_id)
+                    if lang == 'fa':
+                        text = "⚠️ آیا مطمئن هستید می‌خواهید تمام اطلاعات شما از دیتابیس حذف شود؟\nاین کار برگشت‌پذیر نیست."
+                        confirm_text = "✅ تایید حذف"
+                        cancel_text = "❌ انصراف"
+                    else:
+                        text = "⚠️ Are you sure you want to delete all your data from the database?\nThis action cannot be undone."
+                        confirm_text = "✅ Confirm Delete"
+                        cancel_text = "❌ Cancel"
+                    reply_markup = InlineKeyboardMarkup([
+                        [InlineKeyboardButton(confirm_text, callback_data="confirm_delete")],
+                        [InlineKeyboardButton(cancel_text, callback_data="cancel_delete")],
+                    ])
+                    await query.edit_message_text(text=text, reply_markup=reply_markup)
+
+                elif data == "confirm_delete":
+                    lang = get_user_language(chat_id)
+                    deleted = delete_user(chat_id)
+
+                    # Clear any in-memory cached news for this chat
+                    keys_to_delete = [k for k in self._news_pagination_cache.keys() if k.startswith(f"{chat_id}:")]
+                    for k in keys_to_delete:
+                        self._news_pagination_cache.pop(k, None)
+
+                    if lang == 'fa':
+                        text = "✅ اطلاعات شما با موفقیت حذف شد.\nبرای ثبت‌نام مجدد، دستور /start را بزنید." if deleted else "ℹ️ اطلاعاتی برای حذف وجود نداشت.\nبرای ثبت‌نام، /start را بزنید."
+                    else:
+                        text = "✅ Your data has been deleted successfully.\nTo register again, send /start." if deleted else "ℹ️ No data was found to delete.\nTo register, send /start."
+                    await query.edit_message_text(text=text)
+
+                elif data == "cancel_delete":
+                    lang = get_user_language(chat_id)
+                    text = "✅ Deletion canceled." if lang != 'fa' else "✅ عملیات حذف لغو شد."
+                    keyboard = [
+                        [InlineKeyboardButton("📚 Manage Topics" if lang != 'fa' else "📚 مدیریت موضوعات", callback_data="show_topics")],
+                        [InlineKeyboardButton("📰 Manage Sources" if lang != 'fa' else "📰 مدیریت منابع", callback_data="show_sources")],
+                        [InlineKeyboardButton("📰 Get News Now" if lang != 'fa' else "📰 دریافت خبر", callback_data="get_news")],
+                        [InlineKeyboardButton("🗑 Delete My Data" if lang != 'fa' else "🗑 حذف اطلاعات من", callback_data="delete_user")],
+                    ]
+                    await query.edit_message_text(text=text, reply_markup=InlineKeyboardMarkup(keyboard))
+
                 elif data == "get_news":
-                    update_user_activity(chat_id)
                     enabled_sources = get_enabled_sources_for_user(chat_id)
                     enabled_topics = get_enabled_topics_for_user(chat_id)
                     if not enabled_topics or not enabled_sources:
@@ -783,6 +867,14 @@ class TelegramBot:
     async def send_news_to_user(self, chat_id, update=None, context=None):
         """Send personalized news to a specific user"""
         try:
+            if not get_user(chat_id):
+                message = "❌ Please send /start and choose your language first.\nلطفاً ابتدا /start را بزنید و زبان را انتخاب کنید."
+                if update and getattr(update, "message", None):
+                    await update.message.reply_text(message)
+                else:
+                    await self.app.bot.send_message(chat_id, message)
+                return
+
             # Get user preferences and language
             enabled_sources = get_enabled_sources_for_user(chat_id)
             enabled_topics = get_enabled_topics_for_user(chat_id)
@@ -903,4 +995,21 @@ class TelegramBot:
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text(prompt, reply_markup=reply_markup)
+
+    async def delete(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        chat_id = str(update.message.chat.id)
+        lang = get_user_language(chat_id)
+        if lang == 'fa':
+            text = "⚠️ آیا مطمئن هستید می‌خواهید تمام اطلاعات شما از دیتابیس حذف شود؟\nاین کار برگشت‌پذیر نیست."
+            confirm_text = "✅ تایید حذف"
+            cancel_text = "❌ انصراف"
+        else:
+            text = "⚠️ Are you sure you want to delete all your data from the database?\nThis action cannot be undone."
+            confirm_text = "✅ Confirm Delete"
+            cancel_text = "❌ Cancel"
+        reply_markup = InlineKeyboardMarkup([
+            [InlineKeyboardButton(confirm_text, callback_data="confirm_delete")],
+            [InlineKeyboardButton(cancel_text, callback_data="cancel_delete")],
+        ])
+        await update.message.reply_text(text, reply_markup=reply_markup)
 
