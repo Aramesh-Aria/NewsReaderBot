@@ -16,6 +16,7 @@ from datetime import datetime, timedelta
 import logging
 import time
 from math import ceil
+from urllib.parse import urlencode
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +92,17 @@ class TelegramBot:
     def _news_cache_key(self, chat_id, message_id):
         return f"{chat_id}:{message_id}"
 
+    @staticmethod
+    def _google_translate_url(original_url: str, target_lang: str = "fa") -> str:
+        if not original_url:
+            return original_url
+        try:
+            return "https://translate.google.com/translate?" + urlencode(
+                {"sl": "auto", "tl": target_lang, "u": original_url}
+            )
+        except Exception:
+            return original_url
+
     def _build_news_page_text(self, articles, page_index, items_per_page, enabled_topics, enabled_sources, lang):
         total_items = len(articles)
         total_pages = max(1, ceil(total_items / max(1, items_per_page)))
@@ -141,7 +153,11 @@ class TelegramBot:
             source_label = "📰 Source:" if lang != 'fa' else "📰 منبع:"
             body += f"{source_label} {source}\n"
             if url:
-                body += f"🔗 {url}\n"
+                if lang == "fa":
+                    translated_url = self._google_translate_url(url, "fa")
+                    body += f"🔗 لینک فارسی: {translated_url}\n"
+                else:
+                    body += f"🔗 {url}\n"
             body += "\n"
 
         text = header + body
@@ -577,7 +593,7 @@ class TelegramBot:
                 await query.edit_message_text(
                     text=new_text,
                     reply_markup=self._build_news_pagination_keyboard(lang),
-                    disable_web_page_preview=False,
+                    disable_web_page_preview=(lang == "fa"),
                 )
                 return
 
@@ -927,18 +943,19 @@ class TelegramBot:
 
             reply_markup = self._build_news_pagination_keyboard(lang) if total_pages > 1 else None
 
+            disable_preview = lang == "fa"
             if update:
                 sent = await update.message.reply_text(
                     page_text,
                     reply_markup=reply_markup,
-                    disable_web_page_preview=False,
+                    disable_web_page_preview=disable_preview,
                 )
             else:
                 sent = await self.app.bot.send_message(
                     chat_id,
                     page_text,
                     reply_markup=reply_markup,
-                    disable_web_page_preview=False,
+                    disable_web_page_preview=disable_preview,
                 )
 
             if total_pages > 1 and sent:
