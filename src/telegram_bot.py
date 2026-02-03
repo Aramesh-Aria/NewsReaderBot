@@ -103,6 +103,58 @@ class TelegramBot:
         except Exception:
             return original_url
 
+    def _translate_text(self, text: str, target_lang: str = "fa") -> str:
+        text = (text or "").strip()
+        if not text:
+            return text
+
+        # Very small best-effort in-memory cache to avoid re-translating across pagination.
+        cache = getattr(self, "_translation_cache", None)
+        if cache is None:
+            cache = {}
+            self._translation_cache = cache
+
+        key = (target_lang, text)
+        cached = cache.get(key)
+        if isinstance(cached, str):
+            return cached
+
+        # Keep requests small: avoid very long query params / URLs.
+        text_for_request = text[:500]
+        try:
+            resp = requests.get(
+                "https://translate.googleapis.com/translate_a/single",
+                params={
+                    "client": "gtx",
+                    "sl": "auto",
+                    "tl": target_lang,
+                    "dt": "t",
+                    "q": text_for_request,
+                },
+                timeout=6,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            segments = (data or [None])[0] or []
+            translated = "".join(
+                seg[0] for seg in segments if isinstance(seg, list) and seg and isinstance(seg[0], str)
+            ).strip()
+            if not translated:
+                translated = text
+        except Exception:
+            translated = text
+
+        # Bound cache size (simple FIFO eviction).
+        cache[key] = translated
+        if len(cache) > 2000:
+            try:
+                oldest_key = next(iter(cache.keys()))
+                cache.pop(oldest_key, None)
+            except Exception:
+                pass
+
+        return translated
+
     def _build_news_page_text(self, articles, page_index, items_per_page, enabled_topics, enabled_sources, lang):
         total_items = len(articles)
         total_pages = max(1, ceil(total_items / max(1, items_per_page)))
@@ -139,10 +191,17 @@ class TelegramBot:
 
         body = ""
         for article in page_articles:
-            title = (article or {}).get("title") or ("No title" if lang != 'fa' else "بدون عنوان")
+            title_raw = (article or {}).get("title") or ("No title" if lang != 'fa' else "بدون عنوان")
             url = (article or {}).get("url") or ""
-            desc = (article or {}).get("description") or ("No description" if lang != 'fa' else "بدون توضیح")
+            desc_raw = (article or {}).get("description") or ("No description" if lang != 'fa' else "بدون توضیح")
             source = ((article or {}).get("source") or {}).get("name") or ("Unknown" if lang != 'fa' else "نامشخص")
+
+            if lang == "fa":
+                title = self._translate_text(title_raw, "fa")
+                desc = self._translate_text(desc_raw, "fa")
+            else:
+                title = title_raw
+                desc = desc_raw
 
             desc = desc.replace("\n", " ").strip()
             if len(desc) > 160:
@@ -156,6 +215,7 @@ class TelegramBot:
                 if lang == "fa":
                     translated_url = self._google_translate_url(url, "fa")
                     body += f"🔗 لینک فارسی: {translated_url}\n"
+                    body += f"🔗 لینک اصلی: {url}\n"
                 else:
                     body += f"🔗 {url}\n"
             body += "\n"
