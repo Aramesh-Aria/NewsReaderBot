@@ -35,29 +35,6 @@ def create_user(chat_id, username=None, first_name=None, last_name=None, languag
             session.add(user)
             session.commit()
             
-            # Initialize default sources for new user
-            default_sources = ['cnn.com', 'bbc.com', 'theverge.com', 'techcrunch.com', 'nytimes.com']
-            for source in default_sources:
-                user_source = UserSource(
-                    user_id=user.id,
-                    source_domain=source,
-                    is_enabled=True
-                )
-                session.add(user_source)
-            
-            # Initialize default topics for new user (Technology category)
-            default_topics = ["Technology", "Programming", "AI", "Machine Learning"]
-            for topic in default_topics:
-                user_topic = UserTopic(
-                    user_id=user.id,
-                    topic_name=topic,
-                    category="tech",
-                    is_enabled=True
-                )
-                session.add(user_topic)
-            
-            session.commit()
-            
         return user
     except Exception as e:
         session.rollback()

@@ -7,7 +7,7 @@ from src.db_helper import (
     create_user, update_user_activity, get_user_sources,
     get_enabled_sources_for_user,
     get_all_users, get_user_preferences, toggle_user_topic, get_user_topics,
-    get_enabled_topics_for_user, initialize_user_topics, initialize_user_sources,
+    get_enabled_topics_for_user,
     get_user, set_user_language, get_user_language
 )
 from src.categories import TOPIC_CATEGORIES, SOURCE_CATEGORIES, get_all_topics, get_all_sources
@@ -353,8 +353,6 @@ class TelegramBot:
             chat_id = str(update.message.chat.id)
             update_user_activity(chat_id)
             lang = get_user_language(chat_id)
-            # Initialize topics if not already done
-            initialize_user_topics(chat_id)
             message = "📚 Choose a topic category to manage your news topics:\n\n" if lang != 'fa' else "📚 یک دسته‌بندی موضوعی را برای مدیریت موضوعات خبری انتخاب کنید:\n\n"
             # Create first-level keyboard with categories
             keyboard = []
@@ -386,8 +384,6 @@ class TelegramBot:
             chat_id = str(update.message.chat.id)
             update_user_activity(chat_id)
             lang = get_user_language(chat_id)
-            # Initialize sources if not already done
-            initialize_user_sources(chat_id)
             message = "📰 Choose a source category to manage your news sources:\n\n" if lang != 'fa' else "📰 یک دسته‌بندی منبع را برای مدیریت منابع خبری انتخاب کنید:\n\n"
             # Create first-level keyboard with categories
             keyboard = []
@@ -706,8 +702,6 @@ class TelegramBot:
                 
                 # Handle navigation buttons
                 elif data == "show_topics":
-                    # Initialize topics if not already done
-                    initialize_user_topics(chat_id)
                     lang = get_user_language(chat_id)
                     
                     message = "📚 Choose a topic category to manage your news topics:\n\n" if lang != 'fa' else "📚 یک دسته‌بندی موضوعی را برای مدیریت موضوعات خبری انتخاب کنید:\n\n"
@@ -732,8 +726,6 @@ class TelegramBot:
                     await query.edit_message_text(text=message, reply_markup=reply_markup)
                     
                 elif data == "show_sources":
-                    # Initialize sources if not already done
-                    initialize_user_sources(chat_id)
                     lang = get_user_language(chat_id)
                     
                     message = "📰 Choose a source category to manage your news sources:\n\n" if lang != 'fa' else "📰 یک دسته‌بندی منبع را برای مدیریت منابع خبری انتخاب کنید:\n\n"
@@ -758,6 +750,13 @@ class TelegramBot:
                     await query.edit_message_text(text=message, reply_markup=reply_markup)
                     
                 elif data == "get_news":
+                    update_user_activity(chat_id)
+                    enabled_sources = get_enabled_sources_for_user(chat_id)
+                    enabled_topics = get_enabled_topics_for_user(chat_id)
+                    if not enabled_topics or not enabled_sources:
+                        await self.send_news_to_user(chat_id, None, context)
+                        return
+
                     # Send a loading message first
                     lang = get_user_language(chat_id)
                     loading_message = "📰 Fetching your personalized news..." if lang != 'fa' else "📰 در حال دریافت اخبار شخصی‌سازی شده شما..."
@@ -788,12 +787,30 @@ class TelegramBot:
             enabled_sources = get_enabled_sources_for_user(chat_id)
             enabled_topics = get_enabled_topics_for_user(chat_id)
             lang = get_user_language(chat_id)
+
+            async def send_text(text):
+                if update and getattr(update, "message", None):
+                    await update.message.reply_text(text)
+                else:
+                    await self.app.bot.send_message(chat_id, text)
             
-            # Check if user has any preferences set
-            if not enabled_topics and not enabled_sources:
-                message = "❌ No preferences set. Use /topics to set up your news topics!" if lang != 'fa' else "❌ هیچ تنظیماتی انتخاب نشده. از /topics برای تنظیم موضوعات خبری استفاده کنید!"
-                if update:
-                    await update.message.reply_text(message)
+            # Check if user has selected both topics and sources
+            if not enabled_topics or not enabled_sources:
+                if lang == 'fa':
+                    if not enabled_topics and not enabled_sources:
+                        message = "❌ ابتدا از بخش «موضوعات» و «منابع»، موارد دلخواه را انتخاب کنید و بعد دوباره روی «دریافت خبر» بزنید.\n/topics و /sources"
+                    elif not enabled_topics:
+                        message = "❌ ابتدا از بخش «موضوعات» حداقل یک موضوع را انتخاب کنید و بعد دوباره روی «دریافت خبر» بزنید.\n/topics"
+                    else:
+                        message = "❌ ابتدا از بخش «منابع» حداقل یک منبع را انتخاب کنید و بعد دوباره روی «دریافت خبر» بزنید.\n/sources"
+                else:
+                    if not enabled_topics and not enabled_sources:
+                        message = "❌ First select at least one Topic and one Source, then tap News again.\n/topics and /sources"
+                    elif not enabled_topics:
+                        message = "❌ First select at least one Topic, then tap News again.\n/topics"
+                    else:
+                        message = "❌ First select at least one Source, then tap News again.\n/sources"
+                await send_text(message)
                 return
             
             # Fetch personalized news using the new topic system
@@ -803,8 +820,7 @@ class TelegramBot:
             
             if not articles:
                 message = "📭 No news found matching your preferences. Try adjusting your topics or sources." if lang != 'fa' else "📭 هیچ خبری مطابق با تنظیمات شما یافت نشد. موضوعات یا منابع خود را تنظیم کنید."
-                if update:
-                    await update.message.reply_text(message)
+                await send_text(message)
                 return
             
             items_per_page = self._news_items_per_page
@@ -846,9 +862,12 @@ class TelegramBot:
                 }
         except Exception as e:
             logger.exception("Error in send_news_to_user")
+            lang = get_user_language(chat_id)
             error_message = "❌ An error occurred while fetching news. Please try again later." if lang != 'fa' else "❌ خطایی در دریافت اخبار رخ داد. لطفا دوباره تلاش کنید."
-            if update:
+            if update and getattr(update, "message", None):
                 await update.message.reply_text(error_message)
+            else:
+                await self.app.bot.send_message(chat_id, error_message)
             return
 
     async def send_scheduled_news(self, context: CallbackContext):
