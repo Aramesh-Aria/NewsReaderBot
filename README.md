@@ -126,7 +126,7 @@ python main.py
 ---
 ## 📸 نمونه رابط کاربری
 
-![پیام تلگرام](preview.gif)
+![پیام تلگرام](src/preview.gif)
 
 
 ---
