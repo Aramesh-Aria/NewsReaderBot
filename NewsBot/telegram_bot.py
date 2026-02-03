@@ -1,16 +1,16 @@
 import os
 import requests
-from src.news_fetcher import NewsFetcher
+from NewsBot.news_fetcher import NewsFetcher
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackContext, ContextTypes, JobQueue, CallbackQueryHandler, MessageHandler, filters
-from src.db_helper import (
+from NewsBot.db_helper import (
     create_user, update_user_activity, get_user_sources,
     get_enabled_sources_for_user,
     get_all_users, get_user_preferences, toggle_user_topic, get_user_topics,
     get_enabled_topics_for_user,
     get_user, set_user_language, get_user_language, delete_user
 )
-from src.categories import TOPIC_CATEGORIES, SOURCE_CATEGORIES, get_all_topics, get_all_sources
+from NewsBot.categories import TOPIC_CATEGORIES, SOURCE_CATEGORIES, get_all_topics, get_all_sources
 import pytz
 from datetime import datetime, timedelta
 import logging
@@ -469,7 +469,7 @@ class TelegramBot:
                 keyboard.append([
                     InlineKeyboardButton(
                         cat_data["name"], 
-                        callback_data=f"src_cat:{cat_id}"
+                        callback_data=f"NewsBot_cat:{cat_id}"
                     )
                 ])
             # Add navigation buttons
@@ -697,7 +697,7 @@ class TelegramBot:
                         await query.message.reply_text("❌ Category not found.")
                     
                 # Handle source category selection
-                elif data.startswith("src_cat:"):
+                elif data.startswith("NewsBot_cat:"):
                     category_id = data.split(":")[1]
                     result = await self.show_source_category(chat_id, category_id)
                     if result:
@@ -717,7 +717,7 @@ class TelegramBot:
                     user_topics = get_user_topics(chat_id)
                     
                     # Find which category this topic belongs to
-                    from src.categories import get_topic_category
+                    from NewsBot.categories import get_topic_category
                     category_id = get_topic_category(topic_name)
                     if category_id and category_id in TOPIC_CATEGORIES:
                         cat_data = TOPIC_CATEGORIES[category_id]
@@ -753,8 +753,8 @@ class TelegramBot:
                 elif data.startswith("source:"):
                     source_domain = data.split(":", 1)[1]
                     # Inline toggle_user_source logic
-                    from src.db_helper import get_session
-                    from src.models import UserSource
+                    from NewsBot.db_helper import get_session
+                    from NewsBot.models import UserSource
                     session = get_session()
                     try:
                         user = get_user(chat_id)
@@ -787,7 +787,7 @@ class TelegramBot:
                     user_sources = get_user_sources(chat_id)
                     
                     # Find which category this source belongs to
-                    from src.categories import get_source_category
+                    from NewsBot.categories import get_source_category
                     category_id = get_source_category(source_domain)
                     if category_id and category_id in SOURCE_CATEGORIES:
                         cat_data = SOURCE_CATEGORIES[category_id]
@@ -855,7 +855,7 @@ class TelegramBot:
                         keyboard.append([
                             InlineKeyboardButton(
                                 cat_data["name"], 
-                                callback_data=f"src_cat:{cat_id}"
+                                callback_data=f"NewsBot_cat:{cat_id}"
                             )
                         ])
                     

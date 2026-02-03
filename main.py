@@ -8,8 +8,8 @@ import os
 import logging
 import sys
 from dotenv import load_dotenv
-from src.telegram_bot import TelegramBot
-from src.models import create_database
+from NewsBot.telegram_bot import TelegramBot
+from NewsBot.models import create_database
 
 # Configure logging for production
 logging.basicConfig(

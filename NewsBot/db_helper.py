@@ -1,8 +1,8 @@
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
-from src.models import Base, User, UserSource, UserTopic
+from NewsBot.models import Base, User, UserSource, UserTopic
 from datetime import datetime
-from src.categories import TOPIC_CATEGORIES, SOURCE_CATEGORIES, get_all_topics, get_all_sources
+from NewsBot.categories import TOPIC_CATEGORIES, SOURCE_CATEGORIES, get_all_topics, get_all_sources
 import os
 
 def get_engine_and_session():
@@ -143,7 +143,7 @@ def toggle_user_topic(chat_id, topic_name):
                 return user_topic.is_enabled
             else:
                 # Create new topic entry if it doesn't exist
-                from src.categories import get_topic_category
+                from NewsBot.categories import get_topic_category
                 category = get_topic_category(topic_name)
                 if category:
                     user_topic = UserTopic(
@@ -195,7 +195,7 @@ def initialize_user_topics(chat_id):
             
             for topic_name in all_topics:
                 if topic_name not in existing_topics:
-                    from src.categories import get_topic_category
+                    from NewsBot.categories import get_topic_category
                     category = get_topic_category(topic_name)
                     if category:
                         user_topic = UserTopic(
