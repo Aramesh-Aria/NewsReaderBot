@@ -677,7 +677,7 @@ class TelegramBot:
                 elif data.startswith("source:"):
                     source_domain = data.split(":", 1)[1]
                     # Inline toggle_user_source logic
-                    from src.db_helper import get_user, get_session
+                    from src.db_helper import get_session
                     from src.models import UserSource
                     session = get_session()
                     try:
