@@ -14,6 +14,8 @@ from src.categories import TOPIC_CATEGORIES, SOURCE_CATEGORIES, get_all_topics, 
 import pytz
 from datetime import datetime, timedelta
 import logging
+import time
+from math import ceil
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +30,12 @@ class TelegramBot:
 
         # Create NewsFetcher instance
         self.news_fetcher = NewsFetcher(api_key=self.api_key)
+
+        # In-memory pagination cache for news messages (keyed by chat_id:message_id)
+        self._news_pagination_cache = {}
+        self._news_pagination_ttl_seconds = 60 * 60  # 1 hour
+        self._news_items_per_page = 5
+        self._news_fetch_max_articles = 50
 
         # Available news sources (now from categories)
         self.available_sources = get_all_sources()
@@ -58,6 +66,99 @@ class TelegramBot:
         except Exception as e:
             print(f"Job queue not available: {e}")
             self.job_queue = None
+
+    def _prune_news_pagination_cache(self):
+        now = time.time()
+        expired_keys = [
+            k
+            for k, v in self._news_pagination_cache.items()
+            if (now - float(v.get("created_at", now))) > self._news_pagination_ttl_seconds
+        ]
+        for k in expired_keys:
+            self._news_pagination_cache.pop(k, None)
+
+        # Hard cap to avoid unbounded growth (best-effort by created_at)
+        max_entries = 500
+        if len(self._news_pagination_cache) > max_entries:
+            items = sorted(
+                self._news_pagination_cache.items(),
+                key=lambda kv: float(kv[1].get("created_at", 0.0)),
+            )
+            for k, _ in items[: len(self._news_pagination_cache) - max_entries]:
+                self._news_pagination_cache.pop(k, None)
+
+    def _news_cache_key(self, chat_id, message_id):
+        return f"{chat_id}:{message_id}"
+
+    def _build_news_page_text(self, articles, page_index, items_per_page, enabled_topics, enabled_sources, lang):
+        total_items = len(articles)
+        total_pages = max(1, ceil(total_items / max(1, items_per_page)))
+        page_index = max(0, min(int(page_index), total_pages - 1))
+
+        start = page_index * items_per_page
+        end = min(total_items, start + items_per_page)
+        page_articles = articles[start:end]
+
+        header = "📰 Latest News (based on your preferences):\n\n" if lang != 'fa' else "📰 آخرین اخبار (بر اساس تنظیمات شما):\n\n"
+
+        if enabled_topics:
+            topics_label = "📚 Topics:" if lang != 'fa' else "📚 موضوعات:"
+            header += f"{topics_label} {', '.join(enabled_topics[:3])}"
+            if len(enabled_topics) > 3:
+                more_text = " more" if lang != 'fa' else " بیشتر"
+                header += f" (+{len(enabled_topics)-3}{more_text})"
+            header += "\n"
+
+        if enabled_sources:
+            sources_label = "📰 Sources:" if lang != 'fa' else "📰 منابع:"
+            header += f"{sources_label} {', '.join(enabled_sources[:3])}"
+            if len(enabled_sources) > 3:
+                more_text = " more" if lang != 'fa' else " بیشتر"
+                header += f" (+{len(enabled_sources)-3}{more_text})"
+            header += "\n"
+
+        if lang == 'fa':
+            header += f"\nصفحه {page_index + 1} از {total_pages}  |  خبرهای {start + 1} تا {end} از {total_items}\n"
+        else:
+            header += f"\nPage {page_index + 1} of {total_pages}  |  Items {start + 1}-{end} of {total_items}\n"
+
+        header += "\n" + "=" * 50 + "\n\n"
+
+        body = ""
+        for article in page_articles:
+            title = (article or {}).get("title") or ("No title" if lang != 'fa' else "بدون عنوان")
+            url = (article or {}).get("url") or ""
+            desc = (article or {}).get("description") or ("No description" if lang != 'fa' else "بدون توضیح")
+            source = ((article or {}).get("source") or {}).get("name") or ("Unknown" if lang != 'fa' else "نامشخص")
+
+            desc = desc.replace("\n", " ").strip()
+            if len(desc) > 160:
+                desc = desc[:160].rstrip() + "..."
+
+            body += f"🔸 {title}\n"
+            body += f"📝 {desc}\n"
+            source_label = "📰 Source:" if lang != 'fa' else "📰 منبع:"
+            body += f"{source_label} {source}\n"
+            if url:
+                body += f"🔗 {url}\n"
+            body += "\n"
+
+        text = header + body
+
+        # Telegram message limit is 4096; keep a safety margin.
+        if len(text) > 3900:
+            text = text[:3890].rstrip() + "\n…"
+
+        return text, total_pages
+
+    def _build_news_pagination_keyboard(self, lang):
+        prev_text = "⬅️ Prev" if lang != 'fa' else "⬅️ قبلی"
+        next_text = "Next ➡️" if lang != 'fa' else "بعدی ➡️"
+        keyboard = [[
+            InlineKeyboardButton(prev_text, callback_data="news:prev"),
+            InlineKeyboardButton(next_text, callback_data="news:next"),
+        ]]
+        return InlineKeyboardMarkup(keyboard)
 
     async def run_async(self):
         print("polling...")
@@ -404,6 +505,61 @@ class TelegramBot:
         chat_id = str(query.message.chat.id)
         data = query.data
         try:
+            if data in ("news:prev", "news:next"):
+                self._prune_news_pagination_cache()
+                lang = get_user_language(chat_id)
+                key = self._news_cache_key(chat_id, query.message.message_id)
+                state = self._news_pagination_cache.get(key)
+
+                if not state:
+                    expired_message = "⏳ This news list expired. Send /news again." if lang != 'fa' else "⏳ این لیست منقضی شده. دوباره /news را ارسال کنید."
+                    await query.answer(expired_message, show_alert=False)
+                    return
+
+                delta = -1 if data == "news:prev" else 1
+                current_page = int(state.get("page_index", 0))
+                items_per_page = int(state.get("items_per_page", self._news_items_per_page))
+                articles = state.get("articles", []) or []
+                enabled_topics = state.get("enabled_topics", []) or []
+                enabled_sources = state.get("enabled_sources", []) or []
+
+                _, total_pages = self._build_news_page_text(
+                    articles,
+                    current_page,
+                    items_per_page,
+                    enabled_topics,
+                    enabled_sources,
+                    lang,
+                )
+                next_page = current_page + delta
+
+                if next_page < 0:
+                    await query.answer("Already on the first page." if lang != 'fa' else "شما در اولین صفحه هستید.", show_alert=False)
+                    return
+                if next_page >= total_pages:
+                    await query.answer("Already on the last page." if lang != 'fa' else "شما در آخرین صفحه هستید.", show_alert=False)
+                    return
+
+                state["page_index"] = next_page
+                state["created_at"] = time.time()
+                self._news_pagination_cache[key] = state
+
+                new_text, _ = self._build_news_page_text(
+                    articles,
+                    next_page,
+                    items_per_page,
+                    enabled_topics,
+                    enabled_sources,
+                    lang,
+                )
+                await query.answer()
+                await query.edit_message_text(
+                    text=new_text,
+                    reply_markup=self._build_news_pagination_keyboard(lang),
+                    disable_web_page_preview=False,
+                )
+                return
+
             if data == "set_lang_en":
                 set_user_language(chat_id, 'en')
                 await query.answer()
@@ -642,7 +798,7 @@ class TelegramBot:
             
             # Fetch personalized news using the new topic system
             articles = self.news_fetcher.fetch_news_by_topics_and_sources(
-                enabled_topics, enabled_sources
+                enabled_topics, enabled_sources, max_articles=self._news_fetch_max_articles
             )
             
             if not articles:
@@ -651,45 +807,43 @@ class TelegramBot:
                     await update.message.reply_text(message)
                 return
             
-            # Format news message
-            news_message = f"📰 Latest News (based on your preferences):\n\n" if lang != 'fa' else f"📰 آخرین اخبار (بر اساس تنظیمات شما):\n\n"
-            
-            # Show what topics/sources were used
-            if enabled_topics:
-                topics_label = "📚 Topics:" if lang != 'fa' else "📚 موضوعات:"
-                news_message += f"{topics_label} {', '.join(enabled_topics[:3])}"
-                if len(enabled_topics) > 3:
-                    more_text = " more" if lang != 'fa' else " بیشتر"
-                    news_message += f" (+{len(enabled_topics)-3}{more_text})"
-                news_message += "\n"
-            
-            if enabled_sources:
-                sources_label = "📰 Sources:" if lang != 'fa' else "📰 منابع:"
-                news_message += f"{sources_label} {', '.join(enabled_sources[:3])}"
-                if len(enabled_sources) > 3:
-                    more_text = " more" if lang != 'fa' else " بیشتر"
-                    news_message += f" (+{len(enabled_sources)-3}{more_text})"
-                news_message += "\n"
-            
-            news_message += "\n" + "="*50 + "\n\n"
-            
-            for i, article in enumerate(articles[:5], 1):  # Limit to 5 articles
-                title = article.get("title", "No title")
-                url = article.get("url", "")
-                desc = article.get("description", "No description")
-                source = article.get("source", {}).get("name", "Unknown")
-                
-                news_message += f"🔸 {title}\n"
-                news_message += f"📝 {desc[:100]}...\n"
-                source_label = "📰 Source:" if lang != 'fa' else "📰 منبع:"
-                news_message += f"{source_label} {source}\n"
-                news_message += f"🔗 {url}\n\n"
-            
-            # Send message
+            items_per_page = self._news_items_per_page
+            page_text, total_pages = self._build_news_page_text(
+                articles,
+                0,
+                items_per_page,
+                enabled_topics,
+                enabled_sources,
+                lang,
+            )
+
+            reply_markup = self._build_news_pagination_keyboard(lang) if total_pages > 1 else None
+
             if update:
-                await update.message.reply_text(news_message)
+                sent = await update.message.reply_text(
+                    page_text,
+                    reply_markup=reply_markup,
+                    disable_web_page_preview=False,
+                )
             else:
-                await self.app.bot.send_message(chat_id, news_message)
+                sent = await self.app.bot.send_message(
+                    chat_id,
+                    page_text,
+                    reply_markup=reply_markup,
+                    disable_web_page_preview=False,
+                )
+
+            if total_pages > 1 and sent:
+                self._prune_news_pagination_cache()
+                key = self._news_cache_key(chat_id, sent.message_id)
+                self._news_pagination_cache[key] = {
+                    "created_at": time.time(),
+                    "page_index": 0,
+                    "items_per_page": items_per_page,
+                    "articles": articles,
+                    "enabled_topics": enabled_topics,
+                    "enabled_sources": enabled_sources,
+                }
         except Exception as e:
             logger.exception("Error in send_news_to_user")
             error_message = "❌ An error occurred while fetching news. Please try again later." if lang != 'fa' else "❌ خطایی در دریافت اخبار رخ داد. لطفا دوباره تلاش کنید."

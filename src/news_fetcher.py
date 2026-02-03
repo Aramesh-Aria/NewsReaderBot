@@ -51,7 +51,13 @@ class NewsFetcher:
             print(f"Error fetching news: {e}")
             return []
 
-    def fetch_news_by_topics_and_sources(self, enabled_topics, enabled_sources, user_queries=None):
+    def fetch_news_by_topics_and_sources(
+        self,
+        enabled_topics,
+        enabled_sources,
+        user_queries=None,
+        max_articles=None,
+    ):
         """
         Fetch news for a user based on their enabled topics and sources
         """
@@ -80,29 +86,60 @@ class NewsFetcher:
         # Date range: from 2 days ago to today
         two_days_ago = (datetime.now() - timedelta(days=2)).strftime("%Y-%m-%d")
         today = datetime.now().strftime("%Y-%m-%d")
-        
-        params = {
-            "q": combined_query,
-            "language": self.language,
-            "sortBy": "relevancy",
-            "from": two_days_ago,
-            "to": today,
-            "pageSize": self.page_size,
-            "apiKey": self.api_key,
-        }
-        
-        # Add domains parameter only if sources are specified
-        if domains:
-            params["domains"] = domains
 
-        try:
-            response = requests.get(self.url, params=params, timeout=10)
-            response.raise_for_status()
-            data = response.json()
-            return data.get("articles", [])
-        except requests.RequestException as e:
-            print(f"Error fetching news: {e}")
-            return []
+        target_count = max_articles or self.page_size
+        per_page = min(100, max(1, int(target_count)))
+        max_pages = max(1, (target_count + per_page - 1) // per_page)
+
+        all_articles = []
+        seen_urls = set()
+
+        for page in range(1, max_pages + 1):
+            params = {
+                "q": combined_query,
+                "language": self.language,
+                "sortBy": "relevancy",
+                "from": two_days_ago,
+                "to": today,
+                "pageSize": per_page,
+                "page": page,
+                "apiKey": self.api_key,
+            }
+
+            # Add domains parameter only if sources are specified
+            if domains:
+                params["domains"] = domains
+
+            try:
+                response = requests.get(self.url, params=params, timeout=10)
+                response.raise_for_status()
+                data = response.json()
+                articles = data.get("articles", []) or []
+            except requests.RequestException as e:
+                print(f"Error fetching news: {e}")
+                break
+
+            if not articles:
+                break
+
+            for article in articles:
+                url = (article or {}).get("url")
+                if url and url in seen_urls:
+                    continue
+                if url:
+                    seen_urls.add(url)
+                all_articles.append(article)
+                if len(all_articles) >= target_count:
+                    break
+
+            if len(all_articles) >= target_count:
+                break
+
+            # If the API returned fewer than requested for this page, there are no more results.
+            if len(articles) < per_page:
+                break
+
+        return all_articles
 
     def fetch_news(self, query=None, sources=None):
         """
