@@ -9,7 +9,7 @@ import logging
 import sys
 from dotenv import load_dotenv
 from NewsBot.telegram_bot import TelegramBot
-from NewsBot.models import create_database
+from NewsBot.db import init_db
 
 # Configure logging for production
 logging.basicConfig(
@@ -38,7 +38,8 @@ load_dotenv()
 def main():
     # Create database tables
     logger.info("Creating database tables...")
-    create_database()
+    create_tables = os.getenv("DB_CREATE_TABLES", "1").strip() == "1"
+    init_db(create_tables=create_tables)
 
     # Get API keys from environment
     news_api_key = os.getenv("API_KEY")

@@ -1,5 +1,6 @@
 import os
-import requests
+import asyncio
+import httpx
 from NewsBot.news_fetcher import NewsFetcher
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackContext, ContextTypes, JobQueue, CallbackQueryHandler, MessageHandler, filters
@@ -8,7 +9,7 @@ from NewsBot.db_helper import (
     get_enabled_sources_for_user,
     get_all_users, get_user_preferences, toggle_user_topic, get_user_topics,
     get_enabled_topics_for_user,
-    get_user, set_user_language, get_user_language, delete_user
+    get_user, set_user_language, get_user_language, delete_user, toggle_user_source
 )
 from NewsBot.categories import TOPIC_CATEGORIES, SOURCE_CATEGORIES, get_all_topics, get_all_sources
 import pytz
@@ -31,6 +32,13 @@ class TelegramBot:
 
         # Create NewsFetcher instance
         self.news_fetcher = NewsFetcher(api_key=self.api_key)
+
+        # HTTP client for translation (async, keep-alive)
+        self._http_client = None
+        self._translate_concurrency = int(os.getenv("TRANSLATE_CONCURRENCY", "8"))
+        self._translate_timeout_seconds = float(os.getenv("TRANSLATE_TIMEOUT_SECONDS", "4"))
+        self._translate_semaphore = asyncio.Semaphore(max(1, self._translate_concurrency))
+        self._perf_log_enabled = os.getenv("PERF_LOG", "").strip() == "1"
 
         # In-memory pagination cache for news messages (keyed by chat_id:message_id)
         self._news_pagination_cache = {}
@@ -103,7 +111,19 @@ class TelegramBot:
         except Exception:
             return original_url
 
-    def _translate_text(self, text: str, target_lang: str = "fa") -> str:
+    def _get_http_client(self) -> httpx.AsyncClient:
+        client = getattr(self, "_http_client", None)
+        if isinstance(client, httpx.AsyncClient):
+            return client
+
+        timeout = httpx.Timeout(self._translate_timeout_seconds)
+        self._http_client = httpx.AsyncClient(
+            timeout=timeout,
+            headers={"User-Agent": "NewsReaderBot/1.0"},
+        )
+        return self._http_client
+
+    async def _translate_text(self, text: str, target_lang: str = "fa") -> str:
         text = (text or "").strip()
         if not text:
             return text
@@ -119,32 +139,32 @@ class TelegramBot:
         if isinstance(cached, str):
             return cached
 
-        # Keep requests small: avoid very long query params / URLs.
+        translated = text
         text_for_request = text[:500]
         try:
-            resp = requests.get(
-                "https://translate.googleapis.com/translate_a/single",
-                params={
-                    "client": "gtx",
-                    "sl": "auto",
-                    "tl": target_lang,
-                    "dt": "t",
-                    "q": text_for_request,
-                },
-                timeout=6,
-            )
+            client = self._get_http_client()
+            async with self._translate_semaphore:
+                resp = await client.get(
+                    "https://translate.googleapis.com/translate_a/single",
+                    params={
+                        "client": "gtx",
+                        "sl": "auto",
+                        "tl": target_lang,
+                        "dt": "t",
+                        "q": text_for_request,
+                    },
+                )
             resp.raise_for_status()
             data = resp.json()
             segments = (data or [None])[0] or []
-            translated = "".join(
+            translated_candidate = "".join(
                 seg[0] for seg in segments if isinstance(seg, list) and seg and isinstance(seg[0], str)
             ).strip()
-            if not translated:
-                translated = text
+            if translated_candidate:
+                translated = translated_candidate
         except Exception:
             translated = text
 
-        # Bound cache size (simple FIFO eviction).
         cache[key] = translated
         if len(cache) > 2000:
             try:
@@ -155,7 +175,44 @@ class TelegramBot:
 
         return translated
 
-    def _build_news_page_text(self, articles, page_index, items_per_page, enabled_topics, enabled_sources, lang):
+    async def _translate_many(self, texts, target_lang: str = "fa"):
+        texts = [((t or "").strip()) for t in (texts or [])]
+        texts = [t for t in texts if t]
+        if not texts:
+            return {}
+
+        cache = getattr(self, "_translation_cache", None)
+        if cache is None:
+            cache = {}
+            self._translation_cache = cache
+
+        result = {}
+        missing = []
+        seen = set()
+        for t in texts:
+            if t in seen:
+                continue
+            seen.add(t)
+            cached = cache.get((target_lang, t))
+            if isinstance(cached, str):
+                result[t] = cached
+            else:
+                missing.append(t)
+
+        if not missing:
+            return result
+
+        async def _one(text):
+            translated = await self._translate_text(text, target_lang)
+            return text, translated
+
+        pairs = await asyncio.gather(*[_one(t) for t in missing], return_exceptions=False)
+        for original, translated in pairs:
+            result[original] = translated
+
+        return result
+
+    async def _build_news_page_text(self, articles, page_index, items_per_page, enabled_topics, enabled_sources, lang):
         total_items = len(articles)
         total_pages = max(1, ceil(total_items / max(1, items_per_page)))
         page_index = max(0, min(int(page_index), total_pages - 1))
@@ -189,6 +246,19 @@ class TelegramBot:
 
         header += "\n" + "=" * 50 + "\n\n"
 
+        translation_map = {}
+        if lang == "fa":
+            titles = [((a or {}).get("title") or "").strip() for a in page_articles]
+            descs = [((a or {}).get("description") or "").strip() for a in page_articles]
+            t0 = time.perf_counter()
+            translation_map = await self._translate_many([*titles, *descs], "fa")
+            if self._perf_log_enabled:
+                logger.debug(
+                    "perf:translate_page items=%s ms=%.1f",
+                    len(page_articles),
+                    (time.perf_counter() - t0) * 1000.0,
+                )
+
         body = ""
         for article in page_articles:
             title_raw = (article or {}).get("title") or ("No title" if lang != 'fa' else "بدون عنوان")
@@ -197,8 +267,8 @@ class TelegramBot:
             source = ((article or {}).get("source") or {}).get("name") or ("Unknown" if lang != 'fa' else "نامشخص")
 
             if lang == "fa":
-                title = self._translate_text(title_raw, "fa")
-                desc = self._translate_text(desc_raw, "fa")
+                title = translation_map.get(title_raw, title_raw)
+                desc = translation_map.get(desc_raw, desc_raw)
             else:
                 title = title_raw
                 desc = desc_raw
@@ -620,14 +690,8 @@ class TelegramBot:
                 enabled_topics = state.get("enabled_topics", []) or []
                 enabled_sources = state.get("enabled_sources", []) or []
 
-                _, total_pages = self._build_news_page_text(
-                    articles,
-                    current_page,
-                    items_per_page,
-                    enabled_topics,
-                    enabled_sources,
-                    lang,
-                )
+                total_items = len(articles)
+                total_pages = max(1, ceil(total_items / max(1, items_per_page)))
                 next_page = current_page + delta
 
                 if next_page < 0:
@@ -641,7 +705,7 @@ class TelegramBot:
                 state["created_at"] = time.time()
                 self._news_pagination_cache[key] = state
 
-                new_text, _ = self._build_news_page_text(
+                new_text, _ = await self._build_news_page_text(
                     articles,
                     next_page,
                     items_per_page,
@@ -708,13 +772,22 @@ class TelegramBot:
                     
                 # Handle topic toggle
                 elif data.startswith("topic:"):
+                    await query.answer()
                     topic_name = data.split(":", 1)[1]
+                    t0 = time.perf_counter()
                     is_enabled = toggle_user_topic(chat_id, topic_name)
-                    status = "enabled" if is_enabled else "disabled"
                     
                     # Recreate the keyboard with updated status
                     keyboard = []
                     user_topics = get_user_topics(chat_id)
+                    if self._perf_log_enabled:
+                        logger.debug(
+                            "perf:toggle_topic ms=%.1f chat_id=%s topic=%s enabled=%s",
+                            (time.perf_counter() - t0) * 1000.0,
+                            chat_id,
+                            topic_name,
+                            is_enabled,
+                        )
                     
                     # Find which category this topic belongs to
                     from NewsBot.categories import get_topic_category
@@ -742,49 +815,29 @@ class TelegramBot:
                         
                         reply_markup = InlineKeyboardMarkup(keyboard)
                         # Check if markup is different before updating
-                        if query.message.reply_markup and query.message.reply_markup.to_dict() == reply_markup.to_dict():
-                            await query.answer("No change.")
-                        else:
+                        if not (query.message.reply_markup and query.message.reply_markup.to_dict() == reply_markup.to_dict()):
                             await query.edit_message_reply_markup(reply_markup=reply_markup)
                     else:
                         await query.message.reply_text(f"❌ Error: Topic category not found")
                 
                 # Handle source toggle
                 elif data.startswith("source:"):
+                    await query.answer()
                     source_domain = data.split(":", 1)[1]
-                    # Inline toggle_user_source logic
-                    from NewsBot.db_helper import get_session
-                    from NewsBot.models import UserSource
-                    session = get_session()
-                    try:
-                        user = get_user(chat_id)
-                        is_enabled = None
-                        if user:
-                            user_source = session.query(UserSource).filter_by(user_id=user.id, source_domain=source_domain).first()
-                            if user_source:
-                                user_source.is_enabled = not user_source.is_enabled
-                                session.commit()
-                                is_enabled = user_source.is_enabled
-                            else:
-                                # Create new source entry if it doesn't exist
-                                user_source = UserSource(
-                                    user_id=user.id,
-                                    source_domain=source_domain,
-                                    is_enabled=True
-                                )
-                                session.add(user_source)
-                                session.commit()
-                                is_enabled = True
-                    except Exception as e:
-                        session.rollback()
-                        raise e
-                    finally:
-                        session.close()
-                    status = "enabled" if is_enabled else "disabled"
+                    t0 = time.perf_counter()
+                    is_enabled = toggle_user_source(chat_id, source_domain)
                     
                     # Recreate the keyboard with updated status
                     keyboard = []
                     user_sources = get_user_sources(chat_id)
+                    if self._perf_log_enabled:
+                        logger.debug(
+                            "perf:toggle_source ms=%.1f chat_id=%s source=%s enabled=%s",
+                            (time.perf_counter() - t0) * 1000.0,
+                            chat_id,
+                            source_domain,
+                            is_enabled,
+                        )
                     
                     # Find which category this source belongs to
                     from NewsBot.categories import get_source_category
@@ -812,9 +865,7 @@ class TelegramBot:
                         
                         reply_markup = InlineKeyboardMarkup(keyboard)
                         # Check if markup is different before updating
-                        if query.message.reply_markup and query.message.reply_markup.to_dict() == reply_markup.to_dict():
-                            await query.answer("No change.")
-                        else:
+                        if not (query.message.reply_markup and query.message.reply_markup.to_dict() == reply_markup.to_dict()):
                             await query.edit_message_reply_markup(reply_markup=reply_markup)
                     else:
                         await query.message.reply_text(f"❌ Error: Source category not found")
@@ -982,9 +1033,16 @@ class TelegramBot:
                 return
             
             # Fetch personalized news using the new topic system
+            t0 = time.perf_counter()
             articles = self.news_fetcher.fetch_news_by_topics_and_sources(
                 enabled_topics, enabled_sources, max_articles=self._news_fetch_max_articles
             )
+            if self._perf_log_enabled:
+                logger.debug(
+                    "perf:fetch_news articles=%s ms=%.1f",
+                    len(articles or []),
+                    (time.perf_counter() - t0) * 1000.0,
+                )
             
             if not articles:
                 message = "📭 No news found matching your preferences. Try adjusting your topics or sources." if lang != 'fa' else "📭 هیچ خبری مطابق با تنظیمات شما یافت نشد. موضوعات یا منابع خود را تنظیم کنید."
@@ -992,7 +1050,7 @@ class TelegramBot:
                 return
             
             items_per_page = self._news_items_per_page
-            page_text, total_pages = self._build_news_page_text(
+            page_text, total_pages = await self._build_news_page_text(
                 articles,
                 0,
                 items_per_page,
@@ -1089,4 +1147,3 @@ class TelegramBot:
             [InlineKeyboardButton(cancel_text, callback_data="cancel_delete")],
         ])
         await update.message.reply_text(text, reply_markup=reply_markup)
-
