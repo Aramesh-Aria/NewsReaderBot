@@ -7,6 +7,7 @@ This script runs only the bot without the Flask server.
 import os
 import logging
 import sys
+from pathlib import Path
 from dotenv import load_dotenv
 from NewsBot.telegram_bot import TelegramBot
 from NewsBot.db import init_db
@@ -36,9 +37,20 @@ sys.excepthook = handle_exception
 load_dotenv()
 
 def main():
-    # Create database tables
-    logger.info("Creating database tables...")
-    create_tables = os.getenv("DB_CREATE_TABLES", "1").strip() == "1"
+    # Optionally run Alembic migrations at startup (recommended for servers).
+    # If the DB is already up-to-date, this is a fast no-op.
+    if os.getenv("RUN_MIGRATIONS", "0").strip() == "1":
+        logger.info("Running Alembic migrations...")
+        from alembic import command
+        from alembic.config import Config
+
+        alembic_ini = str(Path(__file__).with_name("alembic.ini"))
+        cfg = Config(alembic_ini)
+        command.upgrade(cfg, "head")
+
+    # Create tables via SQLAlchemy only for local/dev (avoid mixing with Alembic in prod).
+    create_tables = os.getenv("DB_CREATE_TABLES", "0").strip() == "1"
+    logger.info("Initializing database (create_tables=%s)...", create_tables)
     init_db(create_tables=create_tables)
 
     # Get API keys from environment
