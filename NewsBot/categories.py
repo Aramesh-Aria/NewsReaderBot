@@ -4,35 +4,61 @@ TOPIC_CATEGORIES = {
         "name": "Technology & Digital",
         "topics": [
             "Technology",
-            "Programming", 
+            "Programming",
             "AI",
             "Machine Learning",
+            "Generative AI",
             "Data Science",
+            "Big Data",
             "Cybersecurity",
+            "Privacy",
+            "Blockchain",
+            "Web3",
+            "Cloud Computing",
+            "DevOps",
+            "Open Source",
             "Startups",
+            "Venture Capital",
+            "Fintech",
             "Gadgets",
             "Internet",
             "Mobile"
         ]
     },
     "sci": {
-        "name": "Science & Education",
+        "name": "Science & Health",
         "topics": [
             "Science",
             "Space",
             "Health",
-            "Education",
-            "Environment"
+            "Medicine",
+            "Public Health",
+            "Biotechnology",
+            "Neuroscience",
+            "Climate Change",
+            "Environment",
+            "Energy",
+            "Renewable Energy",
+            "Education"
         ]
     },
     "pol": {
-        "name": "Politics & Economy",
+        "name": "Politics, Economy & Law",
         "topics": [
             "Politics",
-            "Economy",
             "World Politics",
+            "Geopolitics",
+            "International Relations",
+            "Economy",
+            "Global Economy",
+            "Inflation",
+            "Markets",
             "Business",
+            "Trade",
+            "Sanctions",
             "Law",
+            "International Law",
+            "Human Rights",
             "Elections"
         ]
     },
@@ -48,11 +74,14 @@ TOPIC_CATEGORIES = {
         ]
     },
     "soc": {
-        "name": "Society",
+        "name": "Society & Social Issues",
         "topics": [
             "Society",
             "Human Rights",
-            "Immigration"
+            "Immigration",
+            "Gender Issues",
+            "Social Media",
+            "Digital Society"
         ]
     },
     "spt": {
@@ -66,16 +95,20 @@ TOPIC_CATEGORIES = {
         ]
     },
     "geo": {
-        "name": "Geopolitical & Regional",
+        "name": "Geopolitics & Regional",
         "topics": [
             "Iran News",
-            "US News",
             "Middle East",
-            "Global Affairs",
+            "US Politics",
+            "Europe",
+            "Russia Ukraine War",
+            "China Taiwan",
+            "Nuclear Talks",
             "Sanctions",
-            "Nuclear Talks"
+            "Global Affairs",
+            "Security"
         ]
-    }
+    },
 }
 
 # Source categories and their sources
@@ -90,7 +123,11 @@ SOURCE_CATEGORIES = {
             "apnews.com",       # Associated Press
             "theguardian.com",  # The Guardian
             "bloomberg.com",    # Bloomberg
-            "aljazeera.com"     # Al Jazeera
+            "aljazeera.com",     # Al Jazeera
+            "foreignpolicy.com",
+            "economist.com",
+            "ft.com",              # Financial Times
+            "wsj.com",             # Wall Street Journal
         ]
     },
     "tech": {
@@ -99,10 +136,25 @@ SOURCE_CATEGORIES = {
             "theverge.com",     # The Verge
             "techcrunch.com",   # TechCrunch
             "wired.com",        # WIRED
+            "arstechnica.com",
+            "thenextweb.com",
+            "venturebeat.com",
+            "zdnet.com",
+            "technologyreview.com",   # MIT Tech Review
             "engadget.com",     # Engadget
             "arstechnica.com",  # Ars Technica
             "mashable.com",     # Mashable
             "cnet.com"          # CNET
+        ]
+    },
+    "biz": {
+        "name": "Business & Economy",
+        "sources": [
+            "bloomberg.com",
+            "ft.com",
+            "wsj.com",
+            "cnbc.com",
+            "marketscreener.com"
         ]
     },
     "us": {
@@ -123,7 +175,8 @@ SOURCE_CATEGORIES = {
             "al-monitor.com",   # Al-Monitor
             "arabnews.com",     # Arab News
             "haaretz.com",      # Haaretz
-            "tehrantimes.com"   # Tehran Times (EN)
+            "tehrantimes.com",   # Tehran Times (EN)
+            "middleeasteye.net",
         ]
     }
 }
